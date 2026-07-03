@@ -227,16 +227,28 @@
   function redraw(){
     var ctx=canvas.getContext('2d'), W=canvas.width,H=canvas.height;
     ctx.drawImage(shotImg,0,0);
-    var lw=Math.max(2,W*0.005), hr=Math.max(9,W*0.022);
-    function vline(vx,col,dash){ ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.setLineDash(dash?[lw*3,lw*2]:[]);
-      ctx.beginPath(); ctx.moveTo(vx,0); ctx.lineTo(vx,H); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle=col; ctx.beginPath(); ctx.arc(vx,H/2,hr,0,7); ctx.fill(); }
-    function hline(hy,col,dash){ ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.setLineDash(dash?[lw*3,lw*2]:[]);
-      ctx.beginPath(); ctx.moveTo(0,hy); ctx.lineTo(W,hy); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle=col; ctx.beginPath(); ctx.arc(W/2,hy,hr,0,7); ctx.fill(); }
-    var G='#22c55e', C='#38bdf8';
-    vline(box.oL,G); vline(box.oR,G); hline(box.oT,G); hline(box.oB,G);
-    vline(box.iL,C,true); vline(box.iR,C,true); hline(box.iT,C,true); hline(box.iB,C,true);
+    var oL=box.oL,iL=box.iL,iR=box.iR,oR=box.oR,oT=box.oT,iT=box.iT,iB=box.iB,oB=box.oB;
+    var lw=Math.max(2,W*0.006), hr=Math.max(11,W*0.028), fs=Math.max(20,W*0.05);
+    var Lb=Math.max(1,iL-oL),Rb=Math.max(1,oR-iR),Tb=Math.max(1,iT-oT),Bb=Math.max(1,oB-iB);
+    var lr=Math.round(Lb/(Lb+Rb)*100), tb=Math.round(Tb/(Tb+Bb)*100);
+    function tint(p){ var o=Math.abs(p-50); return o<=5?'rgba(34,197,94,.30)':(o<=10?'rgba(245,158,11,.32)':'rgba(239,68,68,.34)'); }
+    // 実測してる余白帯を塗る（左右＝縦の絵柄範囲、上下＝横の絵柄範囲）
+    ctx.fillStyle=tint(lr);          ctx.fillRect(oL,iT,iL-oL,iB-iT); ctx.fillRect(iR,iT,oR-iR,iB-iT);
+    ctx.fillStyle=tint(tb);          ctx.fillRect(iL,oT,iR-iL,iT-oT); ctx.fillRect(iL,iB,iR-iL,oB-iB);
+    // 外枠（緑・カード縁）と絵柄枠（水色・破線）を"四角"で
+    ctx.lineWidth=lw; ctx.setLineDash([]); ctx.strokeStyle='#22c55e'; ctx.strokeRect(oL,oT,oR-oL,oB-oT);
+    ctx.setLineDash([lw*3,lw*2]); ctx.strokeStyle='#38bdf8'; ctx.strokeRect(iL,iT,iR-iL,iB-iT); ctx.setLineDash([]);
+    // ハンドル（各辺の中央●）
+    ctx.fillStyle='#22c55e';
+    ctx.beginPath(); ctx.arc(oL,(oT+oB)/2,hr,0,7); ctx.arc(oR,(oT+oB)/2,hr,0,7); ctx.arc((oL+oR)/2,oT,hr,0,7); ctx.arc((oL+oR)/2,oB,hr,0,7); ctx.fill();
+    ctx.fillStyle='#38bdf8';
+    ctx.beginPath(); ctx.arc(iL,(iT+iB)/2,hr,0,7); ctx.arc(iR,(iT+iB)/2,hr,0,7); ctx.arc((iL+iR)/2,iT,hr,0,7); ctx.arc((iL+iR)/2,iB,hr,0,7); ctx.fill();
+    // 各辺の比率を画像に直接ラベル
+    ctx.font='800 '+fs+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    function lab(x,y,t){ ctx.lineWidth=fs*0.22; ctx.strokeStyle='rgba(0,0,0,.75)'; ctx.strokeText(t,x,y); ctx.fillStyle='#fff'; ctx.fillText(t,x,y); }
+    var cy=(iT+iB)/2, cx=(iL+iR)/2;
+    lab((oL+iL)/2, cy, lr+'%'); lab((iR+oR)/2, cy, (100-lr)+'%');
+    lab(cx, (oT+iT)/2, tb+'%'); lab(cx, (iB+oB)/2, (100-tb)+'%');
   }
   function nearestHandle(p){
     var W=canvas.width,H=canvas.height, th=Math.max(W*0.06,26), best=null,bd=th;
@@ -341,21 +353,26 @@
     });
     return ocrReady;
   }
-  function cropBottom(){ // カード下部の番号帯だけ切り出し（下22%）
-    var W=canvas.width,H=canvas.height, ch=Math.round(H*0.22), cy=H-ch;
-    var t=document.createElement('canvas'); t.width=W; t.height=ch;
-    var tc=t.getContext('2d'); tc.drawImage(canvas,0,cy,W,ch,0,0,W,ch);
-    // 拡大＋グレースケール強調で読みやすく
-    var up=document.createElement('canvas'); var sc=Math.min(3,1400/W); up.width=W*sc; up.height=ch*sc;
-    var uc=up.getContext('2d'); uc.imageSmoothingEnabled=true; uc.drawImage(t,0,0,up.width,up.height);
-    return up;
+  function cropBottom(){ // 綺麗な撮影原本(shotImg)の下20%を拡大＋コントラスト強調
+    var W=shotImg.width,H=shotImg.height, ch=Math.round(H*0.20), cy=H-ch, sc=Math.min(3,1500/W);
+    var up=document.createElement('canvas'); up.width=Math.round(W*sc); up.height=Math.round(ch*sc);
+    var uc=up.getContext('2d'); uc.imageSmoothingEnabled=true;
+    uc.drawImage(shotImg,0,cy,W,ch,0,0,up.width,up.height);
+    var im=uc.getImageData(0,0,up.width,up.height), d=im.data, i,g,mn=255,mx=0;
+    for(i=0;i<d.length;i+=4){ g=d[i]*.3+d[i+1]*.59+d[i+2]*.11; d[i]=d[i+1]=d[i+2]=g; if(g<mn)mn=g; if(g>mx)mx=g; }
+    var rng=Math.max(1,mx-mn);
+    for(i=0;i<d.length;i+=4){ var v=(d[i]-mn)/rng*255; d[i]=d[i+1]=d[i+2]=v<0?0:(v>255?255:v); }
+    uc.putImageData(im,0,0); return up;
   }
-  function extractType(text){
-    var s=(text||'').replace(/\s+/g,' ');
-    var m=s.match(/\b(\d{1,3})\s*\/\s*([0-9A-Z\-]{1,7})\b/i); // 223/193, 289/SV-P 等
-    return m?(m[1]+'/'+m[2].toUpperCase()):null;
+  function extractType(text){ // 採番(223/193)だけ狙う。M2a等の特殊フォントは無視
+    var s=(text||'').toUpperCase().replace(/\s+/g,' ');
+    var m=s.match(/(\d{1,3})\s*\/\s*([0-9SVP\-]{1,7})/);       // 223/193, 289/SV-P
+    if(m) return m[1]+'/'+m[2];
+    m=s.match(/(\d{2,3})\D{1,3}(\d{2,3})/);                     // スラッシュ誤読の保険
+    if(m) return m[1]+'/'+m[2];
+    return null;
   }
-  function runOCR(){ // 撮影後に自動。型式が読めて、かつ手入力が空なら埋めて検索
+  function runOCR(){ // 撮影後に自動。採番が読めて、かつ手入力が空なら埋めて検索
     if(canvas.hidden) return;
     loadOCR().then(function(T){
       return T.recognize(cropBottom(),'eng',{tessedit_char_whitelist:'0123456789/SVP-',tessedit_pageseg_mode:'6'});
