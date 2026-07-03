@@ -8,64 +8,56 @@
 <style>
   :root{
     --ink:#161a2b; --sub:#6b7186; --line:#e7e9f4; --card:#ffffff;
-    --brand1:#6d5cff; --brand2:#a855f7; --pink:#ff5c93; --cyan:#12c2e9;
+    --brand1:#6d5cff; --brand2:#a855f7; --pink:#ff5c93;
+    --red:#ff5252; --yellow:#f5c518; --green:#22e06a;
     --good:#22c55e; --warn:#f59e0b; --bad:#ef4444;
     --shadow:0 10px 30px rgba(60,50,120,.12);
   }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body{ margin:0; }
-  body{
-    font-family:'Segoe UI','Hiragino Kaku Gothic ProN','Meiryo',sans-serif; color:var(--ink);
-    background:radial-gradient(1200px 600px at 50% -10%, #efeaff 0%, #f6f7fc 40%, #f6f7fc 100%);
-    min-height:100vh;
-  }
+  body{ font-family:'Segoe UI','Hiragino Kaku Gothic ProN','Meiryo',sans-serif; color:var(--ink);
+    background:radial-gradient(1200px 600px at 50% -10%, #efeaff 0%, #f6f7fc 40%, #f6f7fc 100%); min-height:100vh; }
   .app{ max-width:520px; margin:0 auto; padding:16px 16px 40px; }
   .top{ display:flex; align-items:center; gap:10px; padding:6px 2px 14px; }
   .logo{ width:38px; height:38px; border-radius:12px; background:linear-gradient(135deg,var(--brand1),var(--brand2));
     display:grid; place-items:center; color:#fff; font-size:20px; box-shadow:var(--shadow); }
-  .brand{ font-weight:800; font-size:18px; letter-spacing:.3px; }
+  .brand{ font-weight:800; font-size:18px; }
   .brand small{ display:block; font-weight:600; font-size:11px; color:var(--sub); letter-spacing:.5px; }
 
-  .stage{ position:relative; width:100%; aspect-ratio:3/4; border-radius:22px; overflow:hidden;
-    background:#0c0e18; box-shadow:var(--shadow); }
+  .stage{ position:relative; width:100%; aspect-ratio:3/4; border-radius:22px; overflow:hidden; background:#0c0e18; box-shadow:var(--shadow); }
   video,canvas{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
   canvas{ touch-action:none; }
-  .frame{ position:absolute; inset:7%; pointer-events:none; }
-  .frame i{ position:absolute; width:26px; height:26px; border:3px solid #fff; opacity:.9; }
+  .frame{ position:absolute; inset:7%; pointer-events:none; transition:filter .25s; }
+  .frame i{ position:absolute; width:28px; height:28px; border:3px solid var(--red); transition:border-color .25s; }
+  .frame.yellow i{ border-color:var(--yellow); }
+  .frame.green i{ border-color:var(--green); }
+  .frame.green{ filter:drop-shadow(0 0 6px rgba(34,224,106,.6)); }
   .frame .tl{ top:0; left:0; border-right:0; border-bottom:0; border-radius:8px 0 0 0; }
   .frame .tr{ top:0; right:0; border-left:0; border-bottom:0; border-radius:0 8px 0 0; }
   .frame .bl{ bottom:0; left:0; border-right:0; border-top:0; border-radius:0 0 0 8px; }
   .frame .br{ bottom:0; right:0; border-left:0; border-top:0; border-radius:0 0 8px 0; }
-  .scanhint{ position:absolute; left:0; right:0; bottom:12px; text-align:center; color:#fff;
-    font-size:12px; text-shadow:0 1px 4px rgba(0,0,0,.6); }
+  .live{ position:absolute; left:0; right:0; bottom:10px; text-align:center; color:#fff; font-size:13px; font-weight:700;
+    text-shadow:0 1px 5px rgba(0,0,0,.7); }
 
   .shutter{ display:grid; place-items:center; margin:16px 0 6px; }
   .shutter button{ width:74px; height:74px; border-radius:50%; border:0; cursor:pointer;
-    background:linear-gradient(135deg,var(--brand1),var(--brand2)); box-shadow:var(--shadow);
-    position:relative; }
+    background:linear-gradient(135deg,var(--brand1),var(--brand2)); box-shadow:var(--shadow); position:relative; }
   .shutter button::after{ content:""; position:absolute; inset:6px; border-radius:50%; border:3px solid rgba(255,255,255,.9); }
   .shutter button:active{ transform:scale(.94); }
   .mini{ display:flex; gap:8px; justify-content:center; margin-top:8px; }
-  .mini button{ padding:9px 16px; border-radius:999px; border:1px solid var(--line); background:#fff; color:var(--ink);
-    font-weight:600; font-size:13px; }
+  .mini button{ padding:9px 16px; border-radius:999px; border:1px solid var(--line); background:#fff; color:var(--ink); font-weight:600; font-size:13px; }
 
-  .card{ background:var(--card); border:1px solid var(--line); border-radius:18px; padding:16px; margin-top:14px;
-    box-shadow:var(--shadow); }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:18px; padding:16px; margin-top:14px; box-shadow:var(--shadow); }
   .card h3{ margin:0 0 10px; font-size:13px; color:var(--sub); font-weight:700; letter-spacing:.4px; text-transform:uppercase; }
-
   .barwrap{ margin:10px 0; }
   .barlabel{ display:flex; justify-content:space-between; font-size:13px; font-weight:700; margin-bottom:6px; }
   .bar{ position:relative; height:12px; border-radius:999px; background:#eef0f8; overflow:hidden; }
-  .bar .fill{ position:absolute; inset:0 auto 0 0; border-radius:999px; }
+  .bar .fill{ position:absolute; inset:0 auto 0 0; border-radius:999px; width:50%; }
   .bar .center{ position:absolute; top:-3px; bottom:-3px; left:50%; width:2px; background:rgba(0,0,0,.25); }
   .verdict{ font-size:12px; color:var(--sub); margin-top:4px; }
-
   label{ display:block; color:var(--sub); font-size:12px; font-weight:600; margin-bottom:6px; }
-  .field{ display:flex; gap:8px; }
-  input{ flex:1; padding:13px 14px; border-radius:14px; border:1px solid var(--line); background:#fbfbff;
-    color:var(--ink); font-size:16px; }
+  input{ width:100%; padding:13px 14px; border-radius:14px; border:1px solid var(--line); background:#fbfbff; color:var(--ink); font-size:16px; }
   input:focus{ outline:0; border-color:var(--brand1); box-shadow:0 0 0 3px rgba(109,92,255,.15); }
-
   .pricebox{ margin-top:12px; }
   .cardname{ font-size:16px; font-weight:800; }
   .prices{ display:flex; gap:10px; margin-top:10px; }
@@ -82,38 +74,26 @@
 </head>
 <body>
 <div class="app">
-
-  <div class="top">
-    <div class="logo">🎴</div>
-    <div class="brand">AgiS <small>CARD SCAN</small></div>
-  </div>
+  <div class="top"><div class="logo">🎴</div><div class="brand">AgiS <small>CARD SCAN</small></div></div>
 
   <div class="stage" id="stage">
     <video id="video" playsinline muted></video>
     <canvas id="canvas" hidden></canvas>
     <div class="frame" id="frame"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
-    <div class="scanhint" id="scanhint">カードを枠に合わせて撮影</div>
+    <div class="live" id="live">枠にカードを合わせて…</div>
   </div>
 
-  <div class="shutter">
-    <button id="shot" aria-label="撮影"></button>
-  </div>
-  <div class="mini">
-    <button id="retry" hidden>↺ 撮り直す</button>
-  </div>
+  <div class="shutter"><button id="shot" aria-label="撮影"></button></div>
+  <div class="mini"><button id="retry" hidden>↺ 撮り直す</button><button id="manual" hidden>✋ 手動でタップ測定</button></div>
 
   <div class="card" id="centerBox" hidden>
-    <h3>センタリング（目安）</h3>
-    <div id="centerHint" class="empty">撮影後、内側の枠（絵柄の縁）の四隅を 左上→右上→右下→左下 の順にタップ</div>
+    <h3>センタリング</h3>
+    <div id="centerHint" class="empty"></div>
     <div id="centerViz" hidden>
-      <div class="barwrap">
-        <div class="barlabel"><span>左右</span><span id="lrText">–</span></div>
-        <div class="bar"><div class="fill" id="lrFill"></div><div class="center"></div></div>
-      </div>
-      <div class="barwrap">
-        <div class="barlabel"><span>上下</span><span id="tbText">–</span></div>
-        <div class="bar"><div class="fill" id="tbFill"></div><div class="center"></div></div>
-      </div>
+      <div class="barwrap"><div class="barlabel"><span>左右</span><span id="lrText">–</span></div>
+        <div class="bar"><div class="fill" id="lrFill"></div><div class="center"></div></div></div>
+      <div class="barwrap"><div class="barlabel"><span>上下</span><span id="tbText">–</span></div>
+        <div class="bar"><div class="fill" id="tbFill"></div><div class="center"></div></div></div>
       <div class="verdict" id="verdict"></div>
     </div>
   </div>
@@ -121,64 +101,145 @@
   <div class="card">
     <h3>相場</h3>
     <label>型式（例: M2a 223/193 ／ 289/SV-P）</label>
-    <div class="field"><input id="ptype" placeholder="型式を入力（後でOCR自動化）"></div>
+    <input id="ptype" placeholder="型式を入力（後でOCR自動化）">
     <div id="priceOut" class="empty">型式を入れると相場が出る</div>
   </div>
-
 </div>
 
 <script>
 (function(){
   const $=id=>document.getElementById(id);
-  const video=$('video'),canvas=$('canvas'),frame=$('frame'),scanhint=$('scanhint');
-  const shot=$('shot'),retry=$('retry'),centerBox=$('centerBox'),centerHint=$('centerHint');
-  const centerViz=$('centerViz'),lrFill=$('lrFill'),tbFill=$('tbFill'),lrText=$('lrText'),tbText=$('tbText'),verdict=$('verdict');
+  const video=$('video'),canvas=$('canvas'),frame=$('frame'),live=$('live');
+  const shot=$('shot'),retry=$('retry'),manual=$('manual');
+  const centerBox=$('centerBox'),centerHint=$('centerHint'),centerViz=$('centerViz');
+  const lrFill=$('lrFill'),tbFill=$('tbFill'),lrText=$('lrText'),tbText=$('tbText'),verdict=$('verdict');
   const ptype=$('ptype'),priceOut=$('priceOut');
-  let taps=[], PRICES={};
+  let PRICES={}, frozen=false, taps=[], lastAuto={lr:50,tb:50,conf:0};
 
   fetch('prices.json?'+Date.now()).then(r=>r.json()).then(d=>{PRICES=d.cards||{};}).catch(()=>{});
 
+  // ---- カメラ（高解像度＋オートフォーカス）----
   async function startCam(){
     try{
-      const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
-      video.srcObject=s; await video.play();
-    }catch(e){ scanhint.textContent='カメラ不可（型式→相場は使えます）'; }
+      const stream=await navigator.mediaDevices.getUserMedia({
+        video:{ facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1440} }, audio:false });
+      video.srcObject=stream; await video.play();
+      const track=stream.getVideoTracks()[0];
+      try{
+        const caps=track.getCapabilities?track.getCapabilities():{};
+        const adv=[];
+        if(caps.focusMode && caps.focusMode.indexOf('continuous')>=0) adv.push({focusMode:'continuous'});
+        if(caps.focusDistance) adv.push({focusMode:'continuous'});
+        if(adv.length) await track.applyConstraints({advanced:adv});
+      }catch(e){}
+      requestAnimationFrame(loop);
+    }catch(e){ live.textContent='カメラ不可（型式→相場は使えます）'; }
   }
+
+  // ---- ライブ解析用 小キャンバス ----
+  const acv=document.createElement('canvas'); acv.width=170; acv.height=226;
+  const actx=acv.getContext('2d',{willReadFrequently:true});
+  let lastT=0;
+  function loop(t){
+    if(!frozen && video.videoWidth){
+      if(t-lastT>140){ lastT=t; analyze(); }
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function analyze(){
+    const iw=video.videoWidth, ih=video.videoHeight;
+    const mx=iw*0.07, my=ih*0.07;
+    actx.drawImage(video, mx,my, iw-2*mx, ih-2*my, 0,0, acv.width, acv.height);
+    const res=detect();
+    lastAuto=res;
+    // 枠の色
+    frame.classList.remove('yellow','green');
+    if(res.conf>=0.7) frame.classList.add('green');
+    else if(res.conf>=0.35) frame.classList.add('yellow');
+    if(res.conf>=0.35){
+      live.textContent='左右 '+res.lr+':'+(100-res.lr)+'　上下 '+res.tb+':'+(100-res.tb)+(res.conf>=0.7?'　✓測定OK':'　…調整中');
+    }else{
+      live.textContent='枠のフチを検出中…（フルアートは手動タップで）';
+    }
+  }
+
+  // ---- センタリング自動検出（フチ→絵柄のエッジをスキャン）----
+  function detect(){
+    const W=acv.width, H=acv.height;
+    const d=actx.getImageData(0,0,W,H).data;
+    const lum=(x,y)=>{ const i=((y*W+x)<<2); return 0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]; };
+    const TH=26;
+    function scan(axis){
+      // axis: 'L','R','T','B'
+      const vals=[];
+      if(axis==='L'||axis==='R'){
+        for(let y=Math.floor(H*0.3); y<H*0.7; y+=3){
+          let prev, e=-1;
+          if(axis==='L'){ prev=lum(1,y); for(let x=2;x<W*0.45;x++){ const c=lum(x,y); if(Math.abs(c-prev)>TH){e=x;break;} prev=c; } }
+          else { prev=lum(W-2,y); for(let x=W-3;x>W*0.55;x--){ const c=lum(x,y); if(Math.abs(c-prev)>TH){e=W-1-x;break;} prev=c; } }
+          if(e>0) vals.push(e);
+        }
+      } else {
+        for(let x=Math.floor(W*0.3); x<W*0.7; x+=3){
+          let prev, e=-1;
+          if(axis==='T'){ prev=lum(x,1); for(let y=2;y<H*0.45;y++){ const c=lum(x,y); if(Math.abs(c-prev)>TH){e=y;break;} prev=c; } }
+          else { prev=lum(x,H-2); for(let y=H-3;y>H*0.55;y--){ const c=lum(x,y); if(Math.abs(c-prev)>TH){e=H-1-y;break;} prev=c; } }
+          if(e>0) vals.push(e);
+        }
+      }
+      if(vals.length<5) return {v:null,c:0};
+      vals.sort((a,b)=>a-b); const med=vals[vals.length>>1];
+      const close=vals.filter(v=>Math.abs(v-med)<=Math.max(2,med*0.3)).length;
+      return {v:med, c:close/vals.length};
+    }
+    const L=scan('L'),R=scan('R'),T=scan('T'),B=scan('B');
+    if(L.v==null||R.v==null||T.v==null||B.v==null) return {lr:50,tb:50,conf:0};
+    const lr=Math.round(L.v/(L.v+R.v)*100), tb=Math.round(T.v/(T.v+B.v)*100);
+    const conf=Math.min(L.c,R.c,T.c,B.c);
+    return {lr:lr,tb:tb,conf:conf};
+  }
+
+  // ---- 撮影：自動測定を確定（低信頼なら手動促す）----
   function capture(){
     const w=video.videoWidth||720,h=video.videoHeight||960;
     canvas.width=w; canvas.height=h; canvas.getContext('2d').drawImage(video,0,0,w,h);
-    video.hidden=true; canvas.hidden=false; frame.hidden=true; scanhint.hidden=true;
-    shot.parentElement.style.display='none'; retry.hidden=false;
-    centerBox.hidden=false; centerHint.hidden=false; centerViz.hidden=true; centerHint.textContent='内側の四隅をタップ（残り 4）'; taps=[];
+    frozen=true; video.hidden=true; canvas.hidden=false; live.style.display='none';
+    shot.parentElement.style.display='none'; retry.hidden=false; manual.hidden=false;
+    centerBox.hidden=false; taps=[];
+    if(lastAuto.conf>=0.35){ showResult(lastAuto.lr,lastAuto.tb,lastAuto.conf>=0.7?'（自動）':'（自動・目安）'); }
+    else { centerViz.hidden=true; centerHint.hidden=false;
+      centerHint.textContent='自動測定できず（フルアート等）。「✋手動でタップ測定」で内側四隅をタップ。'; }
   }
   function resetShot(){
-    video.hidden=false; canvas.hidden=false; canvas.hidden=true; frame.hidden=false; scanhint.hidden=false;
-    shot.parentElement.style.display=''; retry.hidden=true; centerBox.hidden=true; taps=[];
+    frozen=false; video.hidden=false; canvas.hidden=true; live.style.display=''; frame.classList.remove('green','yellow');
+    shot.parentElement.style.display=''; retry.hidden=true; manual.hidden=true; centerBox.hidden=true; taps=[];
+  }
+  function startManual(){
+    centerViz.hidden=true; centerHint.hidden=false; centerHint.textContent='内側の四隅をタップ（残り 4）'; taps=[];
   }
   canvas.addEventListener('pointerdown',function(ev){
-    if(canvas.hidden) return;
+    if(canvas.hidden||centerHint.hidden) return;
     const r=canvas.getBoundingClientRect();
     const x=(ev.clientX-r.left)/r.width*canvas.width, y=(ev.clientY-r.top)/r.height*canvas.height;
     taps.push({x:x,y:y});
     const ctx=canvas.getContext('2d'); ctx.fillStyle='#6d5cff'; ctx.beginPath(); ctx.arc(x,y,12,0,7); ctx.fill();
     const rem=4-taps.length;
     if(rem>0){ centerHint.textContent='内側の四隅をタップ（残り '+rem+'）'; return; }
-    showCentering();
+    const xs=taps.map(t=>t.x),ys=taps.map(t=>t.y);
+    const L=Math.min.apply(null,xs),R=canvas.width-Math.max.apply(null,xs),T=Math.min.apply(null,ys),B=canvas.height-Math.max.apply(null,ys);
+    if(!(L+R>0)||!(T+B>0)){ centerHint.textContent='うまく取れず。もう一度四隅をタップ。'; taps=[]; return; }
+    centerHint.hidden=true; showResult(Math.round(L/(L+R)*100),Math.round(T/(T+B)*100),'（手動）');
   });
-  function qcolor(p){ const off=Math.abs(p-50); return off<=5?'var(--good)':(off<=12?'var(--warn)':'var(--bad)'); }
-  function showCentering(){
-    const xs=taps.map(t=>t.x), ys=taps.map(t=>t.y);
-    const L=Math.min.apply(null,xs), R=canvas.width-Math.max.apply(null,xs);
-    const T=Math.min.apply(null,ys), B=canvas.height-Math.max.apply(null,ys);
-    if(!(L+R>0)||!(T+B>0)){ centerHint.textContent='うまく取れなかった。撮り直して。'; return; }
-    const lr=Math.round(L/(L+R)*100), tb=Math.round(T/(T+B)*100);
+
+  function qcolor(p){ const o=Math.abs(p-50); return o<=5?'var(--good)':(o<=12?'var(--warn)':'var(--bad)'); }
+  function showResult(lr,tb,tag){
     centerHint.hidden=true; centerViz.hidden=false;
     lrText.textContent=lr+' : '+(100-lr); tbText.textContent=tb+' : '+(100-tb);
     lrFill.style.width=lr+'%'; lrFill.style.background=qcolor(lr);
     tbFill.style.width=tb+'%'; tbFill.style.background=qcolor(tb);
     const worst=Math.max(Math.abs(lr-50),Math.abs(tb-50));
-    verdict.textContent = worst<=5 ? '◎ センタリング良好（PSA10狙える目安）'
-      : worst<=12 ? '○ ややズレ。角・エッジと合わせて判断' : '△ ズレ大。PSA10は厳しめ（自分の目で最終判断）';
+    verdict.textContent=(worst<=5?'◎ センタリング良好':worst<=12?'○ ややズレ':'△ ズレ大')+' '+tag+'・最終判断は自分の目で';
   }
 
   function slug(t){ return String(t).trim().toLowerCase().replace(/[\s/]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,''); }
@@ -189,17 +250,16 @@
     const c=PRICES[k];
     if(!c){ priceOut.className='empty'; priceOut.innerHTML='<span class="chip" style="background:#fff0f4;color:#e11d63">未収録</span> スニダン現物で確認を（'+k+'）'; return; }
     priceOut.className='pricebox';
-    priceOut.innerHTML=
-      '<div class="cardname">'+(c.name||'')+'</div>'+
-      '<div class="prices">'+
-        '<div class="pill psa"><div class="k">PSA10</div><div class="v">'+yen(c.psa10)+'</div></div>'+
-        '<div class="pill raw"><div class="k">素体</div><div class="v">'+yen(c.sotai)+'</div></div>'+
-      '</div>'+
+    priceOut.innerHTML='<div class="cardname">'+(c.name||'')+'</div><div class="prices">'+
+      '<div class="pill psa"><div class="k">PSA10</div><div class="v">'+yen(c.psa10)+'</div></div>'+
+      '<div class="pill raw"><div class="k">素体</div><div class="v">'+yen(c.sotai)+'</div></div></div>'+
       '<div class="src">出典 '+(c.src||'')+'（算定値）・最終値付けはスニダン現物で</div>';
   }
+
   ptype.addEventListener('input',lookup);
   shot.addEventListener('click',capture);
   retry.addEventListener('click',resetShot);
+  manual.addEventListener('click',startManual);
   startCam();
 })();
 </script>
