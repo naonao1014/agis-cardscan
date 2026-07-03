@@ -19,8 +19,9 @@
     display:grid; place-items:center; color:#fff; font-size:20px; box-shadow:var(--shadow); }
   .brand{ font-weight:800; font-size:18px; } .brand small{ display:block; font-weight:600; font-size:11px; color:var(--sub); letter-spacing:.5px; }
   .stage{ position:relative; width:100%; aspect-ratio:3/4; border-radius:22px; overflow:hidden; background:#0c0e18; box-shadow:var(--shadow); }
-  video,canvas{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-  canvas{ touch-action:pan-y; }
+  video,canvas{ position:absolute; inset:0; width:100%; height:100%; }
+  video{ object-fit:cover; }
+  canvas{ object-fit:contain; touch-action:none; }
   .frame{ position:absolute; inset:7%; pointer-events:none; }
   .frame i{ position:absolute; width:28px; height:28px; border:3px solid #fff; opacity:.92; }
   .frame .tl{ top:0; left:0; border-right:0; border-bottom:0; border-radius:8px 0 0 0; }
@@ -96,7 +97,7 @@
       <div class="barwrap"><div class="barlabel"><span>上下</span><span id="tbText">–</span></div>
         <div class="bar"><div class="fill" id="tbFill"></div><div class="c1"></div><div class="c2"></div></div></div>
       <div class="verdict" id="verdict"></div>
-      <div class="mini" style="margin-top:12px"><button id="manual">四隅を手動タップで測り直す</button></div>
+      <div class="mini" style="margin-top:12px"><button id="redetect">↻ 自動再検出</button></div>
     </div>
   </div>
 
@@ -114,8 +115,8 @@
   var video=$('video'),canvas=$('canvas'),lvl=$('lvl'),crossG=$('crossG'),live=$('live');
   var shot=$('shot'),retry=$('retry'),centerBox=$('centerBox'),centerHint=$('centerHint'),centerViz=$('centerViz');
   var lrFill=$('lrFill'),tbFill=$('tbFill'),lrText=$('lrText'),tbText=$('tbText'),verdict=$('verdict'),psaBadge=$('psaBadge'),srcTag=$('srcTag');
-  var ptype=$('ptype'),priceOut=$('priceOut'),manual=$('manual');
-  var PRICES={}, taps=[], tapMode=false;
+  var ptype=$('ptype'),priceOut=$('priceOut'),redetect=$('redetect');
+  var PRICES={};
 
   fetch('prices.json?'+Date.now()).then(function(r){return r.json();}).then(function(d){PRICES=d.cards||{};}).catch(function(){});
 
@@ -159,89 +160,113 @@
   }
   // 最初のタッチで自動有効化（iOSの許可はジェスチャ内で要求）
   document.addEventListener('pointerdown',function once(){ enableSensors(); document.removeEventListener('pointerdown',once); });
-  function enableSensors(){
-    var DM=window.DeviceMotionEvent;
-    if(DM && DM.requestPermission){ DM.requestPermission().then(function(s){ if(s==='granted') window.addEventListener('devicemotion',onMotion); }).catch(function(){}); }
-    else if(DM){ window.addEventListener('devicemotion',onMotion); }
-    setTimeout(function(){ if(!gotMotion){ lvl.style.opacity='.35'; if(live.textContent.indexOf('傾き')<0 && live.textContent.indexOf('OK')<0) live.textContent='傾きセンサー未対応：目視で水平に'; } },1400);
-  }
-  document.addEventListener('pointerdown',function once(){ enableSensors(); document.removeEventListener('pointerdown',once); });
 
-  /* ---------- 撮影 ---------- */
+  /* ---------- 撮影 → ドラッグ式センタリング枠 ----------
+     緑=カード外枠(4辺)、水色=絵柄枠(4辺)。自動検出で初期配置→ユーザーが線をドラッグして合わせる。
+     どこを枠と判定したかが見える＆黒縁SAR等の低精度を手で補正できる。 */
+  var shotImg=document.createElement('canvas'), box=null, detected=false, drag=null;
   function capture(){
     var w=video.videoWidth||720,h=video.videoHeight||960;
     canvas.width=w; canvas.height=h; canvas.getContext('2d').drawImage(video,0,0,w,h);
+    shotImg.width=w; shotImg.height=h; shotImg.getContext('2d').drawImage(canvas,0,0);
     video.hidden=true; canvas.hidden=false; lvl.style.display='none'; live.style.display='none';
     shot.parentElement.style.display='none'; retry.hidden=false;
-    centerBox.hidden=false; centerViz.hidden=true; centerHint.hidden=false; centerHint.textContent='自動解析中…'; taps=[]; tapMode=false;
-    setTimeout(autoCenter,30);
+    centerBox.hidden=false; centerViz.hidden=false; centerHint.hidden=false;
+    centerHint.textContent='解析中…';
+    setTimeout(function(){ autoCenter(); },30);
     setTimeout(runOCR,80);
   }
   function resetShot(){
     video.hidden=false; canvas.hidden=true; lvl.style.display=''; lvl.style.opacity=''; live.style.display='';
-    shot.parentElement.style.display=''; retry.hidden=true; centerBox.hidden=true; taps=[]; tapMode=false;
+    shot.parentElement.style.display=''; retry.hidden=true; centerBox.hidden=true; box=null; drag=null;
   }
 
-  /* ---------- 自動センタリング（静止画に1回・勾配プロジェクション） ----------
-     縦エッジ=列ごとの水平勾配エネルギー、横エッジ=行ごとの垂直勾配エネルギーを合算。
-     両側の外側ピーク=カード縁、その内側ピーク=絵柄枠 → 枠幅比。 */
+  /* 勾配プロジェクションで初期枠を推定。失敗しても既定枠を置いて必ずドラッグ可能に。 */
   function autoCenter(){
+    var W=canvas.width,H=canvas.height;
+    detected=false;
     try{
-      var W=canvas.width,H=canvas.height;
       var sw=420, sh=Math.round(H*sw/W);
       var t=document.createElement('canvas'); t.width=sw; t.height=sh;
-      var tc=t.getContext('2d'); tc.drawImage(canvas,0,0,sw,sh);
-      var d=tc.getImageData(0,0,sw,sh).data;
+      t.getContext('2d').drawImage(canvas,0,0,sw,sh);
+      var d=t.getContext('2d').getImageData(0,0,sw,sh).data;
       function L(x,y){ var i=(y*sw+x)*4; return d[i]*.30+d[i+1]*.59+d[i+2]*.11; }
-      // 縦エッジ profile（中央60%帯で合算）
       var colE=new Float32Array(sw), rowE=new Float32Array(sh);
-      var y0=(sh*0.20)|0,y1=(sh*0.80)|0, x0=(sw*0.20)|0,x1=(sw*0.80)|0;
-      for(var x=1;x<sw-1;x++){ var s=0; for(var y=y0;y<y1;y++) s+=Math.abs(L(x+1,y)-L(x-1,y)); colE[x]=s/(y1-y0); }
-      for(var y=1;y<sh-1;y++){ var s=0; for(var x=x0;x<x1;x++) s+=Math.abs(L(x,y+1)-L(x,y-1)); rowE[y]=s/(x1-x0); }
-      function smooth(p){ var q=new Float32Array(p.length); for(var i=2;i<p.length-2;i++) q[i]=(p[i-2]+p[i-1]*2+p[i]*3+p[i+1]*2+p[i+2])/9; return q; }
+      var y0=(sh*0.20)|0,y1=(sh*0.80)|0, x0=(sw*0.20)|0,x1=(sw*0.80)|0,x,y,s;
+      for(x=1;x<sw-1;x++){ s=0; for(y=y0;y<y1;y++) s+=Math.abs(L(x+1,y)-L(x-1,y)); colE[x]=s/(y1-y0); }
+      for(y=1;y<sh-1;y++){ s=0; for(x=x0;x<x1;x++) s+=Math.abs(L(x,y+1)-L(x,y-1)); rowE[y]=s/(x1-x0); }
+      function smooth(p){ var q=new Float32Array(p.length),i; for(i=2;i<p.length-2;i++) q[i]=(p[i-2]+p[i-1]*2+p[i]*3+p[i+1]*2+p[i+2])/9; return q; }
       colE=smooth(colE); rowE=smooth(rowE);
-      function peaks(p){ // 位置順の強いピーク（最大の30%以上・分離12px）
-        var mx=0,n=p.length; for(var i=0;i<n;i++) if(p[i]>mx)mx=p[i];
-        if(mx<6) return [];
-        var th=mx*0.30, cand=[];
-        for(var i=3;i<n-3;i++){ if(p[i]>=th && p[i]>=p[i-1]&&p[i]>=p[i+1]&&p[i]>=p[i-2]&&p[i]>=p[i+2]) cand.push([i,p[i]]); }
+      function peaks(p){ var mx=0,n=p.length,i; for(i=0;i<n;i++) if(p[i]>mx)mx=p[i]; if(mx<6) return [];
+        var th=mx*0.28, cand=[]; for(i=3;i<n-3;i++){ if(p[i]>=th && p[i]>=p[i-1]&&p[i]>=p[i+1]&&p[i]>=p[i-2]&&p[i]>=p[i+2]) cand.push([i,p[i]]); }
         cand.sort(function(a,b){return b[1]-a[1];});
-        var pick=[]; for(var k=0;k<cand.length;k++){ var ok=true; for(var m=0;m<pick.length;m++) if(Math.abs(cand[k][0]-pick[m])<12){ok=false;break;} if(ok)pick.push(cand[k][0]); }
-        pick.sort(function(a,b){return a-b;}); return pick;
+        var pick=[],k,m,ok; for(k=0;k<cand.length;k++){ ok=true; for(m=0;m<pick.length;m++) if(Math.abs(cand[k][0]-pick[m])<12){ok=false;break;} if(ok)pick.push(cand[k][0]); }
+        pick.sort(function(a,b){return a-b;}); return pick; }
+      var px=peaks(colE), py=peaks(rowE), sx=W/sw, sy=H/sh;
+      if(px.length>=4 && py.length>=4){
+        var oL=px[0]*sx,iL=px[1]*sx,iR=px[px.length-2]*sx,oR=px[px.length-1]*sx;
+        var oT=py[0]*sy,iT=py[1]*sy,iB=py[py.length-2]*sy,oB=py[py.length-1]*sy;
+        if((oR-oL)>W*0.5 && (oB-oT)>H*0.5 && (iL-oL)>2 && (oR-iR)>2 && (iT-oT)>2 && (oB-iB)>2){
+          box={oL:oL,iL:iL,iR:iR,oR:oR,oT:oT,iT:iT,iB:iB,oB:oB}; detected=true;
+        }
       }
-      var px=peaks(colE), py=peaks(rowE);
-      if(px.length<4 || py.length<4){ manualPrompt('自動検出できず（枠が薄い/全面イラスト）。'); return; }
-      var oL=px[0], iL=px[1], iR=px[px.length-2], oR=px[px.length-1];
-      var oT=py[0], iT=py[1], iB=py[py.length-2], oB=py[py.length-1];
-      // カード外形が画像の6割以上を占めるか（枠内に収まってる想定）
-      if((oR-oL)<sw*0.55 || (oB-oT)<sh*0.55){ manualPrompt('カード全体が枠に入ってない可能性。'); return; }
-      var Lb=iL-oL, Rb=oR-iR, Tb=iT-oT, Bb=oB-iB;
-      if(Lb<2||Rb<2||Tb<2||Bb<2||(Lb+Rb)<8||(Tb+Bb)<8){ manualPrompt('枠幅が取れず自動不可。'); return; }
-      showResult(Math.round(Lb/(Lb+Rb)*100), Math.round(Tb/(Tb+Bb)*100),'auto');
-    }catch(e){ manualPrompt('自動解析に失敗。'); }
-  }
-  function manualPrompt(msg){
-    centerViz.hidden=true; centerHint.hidden=false;
-    centerHint.textContent=(msg||'')+'内側の四隅を 左上→右上→右下→左下 の順にタップ（残り 4）';
-    tapMode=true; taps=[];
+    }catch(e){}
+    if(!box || !detected){ // 既定枠（画面比で仮置き）
+      box={oL:W*0.05,iL:W*0.14,iR:W*0.86,oR:W*0.95, oT:H*0.04,iT:H*0.11,iB:H*0.89,oB:H*0.96};
+    }
+    centerHint.textContent=(detected?'自動検出した枠を表示。':'自動不可→仮枠を表示。')+' 緑=カード縁 / 水色=絵柄枠。線をドラッグして合わせて（黒縁SARは特に要調整）';
+    redraw(); updateCenter();
   }
 
-  /* ---------- 手動タップ測定 ---------- */
+  /* 画像は object-fit:contain 表示。client座標→canvas画素へ（レターボックス補正） */
+  function toCanvas(cx,cy){
+    var r=canvas.getBoundingClientRect(), W=canvas.width,H=canvas.height;
+    var sc=Math.min(r.width/W, r.height/H), dw=W*sc, dh=H*sc, ox=(r.width-dw)/2, oy=(r.height-dh)/2;
+    return { x:(cx-r.left-ox)/sc, y:(cy-r.top-oy)/sc, sc:sc };
+  }
+  function redraw(){
+    var ctx=canvas.getContext('2d'), W=canvas.width,H=canvas.height;
+    ctx.drawImage(shotImg,0,0);
+    var lw=Math.max(2,W*0.005), hr=Math.max(9,W*0.022);
+    function vline(vx,col,dash){ ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.setLineDash(dash?[lw*3,lw*2]:[]);
+      ctx.beginPath(); ctx.moveTo(vx,0); ctx.lineTo(vx,H); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=col; ctx.beginPath(); ctx.arc(vx,H/2,hr,0,7); ctx.fill(); }
+    function hline(hy,col,dash){ ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.setLineDash(dash?[lw*3,lw*2]:[]);
+      ctx.beginPath(); ctx.moveTo(0,hy); ctx.lineTo(W,hy); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=col; ctx.beginPath(); ctx.arc(W/2,hy,hr,0,7); ctx.fill(); }
+    var G='#22c55e', C='#38bdf8';
+    vline(box.oL,G); vline(box.oR,G); hline(box.oT,G); hline(box.oB,G);
+    vline(box.iL,C,true); vline(box.iR,C,true); hline(box.iT,C,true); hline(box.iB,C,true);
+  }
+  function nearestHandle(p){
+    var W=canvas.width,H=canvas.height, th=Math.max(W*0.06,26), best=null,bd=th;
+    var vs=['oL','iL','iR','oR'], hs=['oT','iT','iB','oB'],i,dd;
+    for(i=0;i<vs.length;i++){ dd=Math.abs(p.x-box[vs[i]]); if(dd<bd){bd=dd;best={k:vs[i],ax:'x'};} }
+    for(i=0;i<hs.length;i++){ dd=Math.abs(p.y-box[hs[i]]); if(dd<bd){bd=dd;best={k:hs[i],ax:'y'};} }
+    return best;
+  }
   canvas.addEventListener('pointerdown',function(ev){
-    if(canvas.hidden||!tapMode) return;
-    ev.preventDefault();
-    var r=canvas.getBoundingClientRect();
-    var x=(ev.clientX-r.left)/r.width*canvas.width, y=(ev.clientY-r.top)/r.height*canvas.height;
-    taps.push({x:x,y:y});
-    var ctx=canvas.getContext('2d'); ctx.fillStyle='#6d5cff'; ctx.beginPath(); ctx.arc(x,y,Math.max(8,canvas.width*0.012),0,7); ctx.fill();
-    var rem=4-taps.length;
-    if(rem>0){ centerHint.textContent='内側の四隅をタップ（残り '+rem+'）'; return; }
-    var xs=taps.map(function(t){return t.x;}), ys=taps.map(function(t){return t.y;});
-    var L=Math.min.apply(null,xs), R=canvas.width-Math.max.apply(null,xs), T=Math.min.apply(null,ys), B=canvas.height-Math.max.apply(null,ys);
-    if(!(L+R>0)||!(T+B>0)){ centerHint.textContent='うまく取れず。四隅をタップし直して。'; taps=[]; return; }
-    tapMode=false;
-    showResult(Math.round(L/(L+R)*100), Math.round(T/(T+B)*100),'manual');
+    if(canvas.hidden||!box) return;
+    var p=toCanvas(ev.clientX,ev.clientY), h=nearestHandle(p);
+    if(h){ ev.preventDefault(); drag=h; canvas.setPointerCapture&&canvas.setPointerCapture(ev.pointerId); }
   });
+  canvas.addEventListener('pointermove',function(ev){
+    if(!drag||canvas.hidden) return;
+    ev.preventDefault();
+    var p=toCanvas(ev.clientX,ev.clientY), W=canvas.width,H=canvas.height, m=6;
+    if(drag.ax==='x'){ var v=Math.max(0,Math.min(W,p.x));
+      if(drag.k==='oL') v=Math.min(v,box.iL-m); else if(drag.k==='iL') v=Math.max(box.oL+m,Math.min(v,box.iR-m));
+      else if(drag.k==='iR') v=Math.max(box.iL+m,Math.min(v,box.oR-m)); else v=Math.max(v,box.iR+m);
+      box[drag.k]=v;
+    } else { var w=Math.max(0,Math.min(H,p.y));
+      if(drag.k==='oT') w=Math.min(w,box.iT-m); else if(drag.k==='iT') w=Math.max(box.oT+m,Math.min(w,box.iB-m));
+      else if(drag.k==='iB') w=Math.max(box.iT+m,Math.min(w,box.oB-m)); else w=Math.max(w,box.iB+m);
+      box[drag.k]=w;
+    }
+    redraw(); updateCenter();
+  });
+  function endDrag(){ drag=null; }
+  canvas.addEventListener('pointerup',endDrag); canvas.addEventListener('pointercancel',endDrag);
 
   function qcolor(p){ var o=Math.abs(p-50); return o<=5?'var(--good)':(o<=10?'var(--warn)':'var(--bad)'); }
   function psaEst(lr,tb){
@@ -251,15 +276,17 @@
     if(worst<=15) return {g:'8',c:'var(--bad)',n:'ズレ大（65:35圏）'};
     return {g:'≤7',c:'var(--bad)',n:'センタリング大きくズレ'};
   }
-  function showResult(lr,tb,src){
-    centerHint.hidden=true; centerViz.hidden=false;
+  function updateCenter(){
+    if(!box) return;
+    var Lb=Math.max(1,box.iL-box.oL), Rb=Math.max(1,box.oR-box.iR), Tb=Math.max(1,box.iT-box.oT), Bb=Math.max(1,box.oB-box.iB);
+    var lr=Math.round(Lb/(Lb+Rb)*100), tb=Math.round(Tb/(Tb+Bb)*100);
     lrText.textContent=lr+' : '+(100-lr); tbText.textContent=tb+' : '+(100-tb);
     lrFill.style.width=lr+'%'; lrFill.style.background=qcolor(lr);
     tbFill.style.width=tb+'%'; tbFill.style.background=qcolor(tb);
     var e=psaEst(lr,tb);
     psaBadge.textContent='PSA '+e.g; psaBadge.style.background=e.c;
-    if(src==='auto'){ srcTag.textContent='自動推定・要確認'; srcTag.style.background='#fff4e5'; srcTag.style.color='#b45309'; }
-    else { srcTag.textContent='手動タップ'; srcTag.style.background='#eaf7ee'; srcTag.style.color='#15803d'; }
+    if(detected){ srcTag.textContent='自動検出（要確認）'; srcTag.style.background='#fff4e5'; srcTag.style.color='#b45309'; }
+    else { srcTag.textContent='手動で線合わせ'; srcTag.style.background='#eaf7ee'; srcTag.style.color='#15803d'; }
     verdict.textContent=e.n+'　※角・エッジ・傷は別途。最終は自分の目で';
   }
 
@@ -341,10 +368,7 @@
   ptype.addEventListener('input',search);
   shot.addEventListener('click',capture);
   retry.addEventListener('click',resetShot);
-  manual.addEventListener('click',function(){ // 再タップのため静止画を描き直す
-    var w=canvas.width,h=canvas.height; // 既存画像の上に丸が残るので撮り直し扱いはしない：画像はそのまま、丸だけ気にせず測る
-    manualPrompt('');
-  });
+  redetect.addEventListener('click',function(){ if(!canvas.hidden) autoCenter(); });
 })();
 </script>
 </body>
