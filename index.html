@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>AgiS カード検品</title>
 <style>
-  :root{ --bg:#0f1420; --panel:#1a2130; --line:#2a3346; --txt:#e6e9ef; --sub:#8b93a7; --accent:#4a7dff; }
+  :root{ --bg:#0f1420; --panel:#1a2130; --line:#2a3346; --txt:#e6e9ef; --sub:#8b93a7; --accent:#4a7dff; --good:#4ade80; }
   *{ box-sizing:border-box; }
   body{ margin:0; background:var(--bg); color:var(--txt); font-family:'Segoe UI','Meiryo',sans-serif; }
   header{ padding:12px 16px; font-weight:700; border-bottom:1px solid var(--line); }
@@ -22,8 +22,9 @@
   label{ display:block; color:var(--sub); font-size:12px; margin-bottom:4px; }
   input{ width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#0f1420; color:var(--txt); font-size:16px; }
   .big{ font-size:22px; font-weight:700; }
-  a.link{ display:inline-block; margin-top:8px; color:#8fb3ff; }
+  .price{ font-size:20px; font-weight:700; }
   .muted{ color:var(--sub); font-size:12px; }
+  .name{ font-size:15px; font-weight:600; margin-bottom:6px; }
 </style>
 </head>
 <body>
@@ -44,17 +45,13 @@
 
   <div class="card" id="centerBox" hidden>
     <div class="muted">センタリング（目安・判定は自分の目で）</div>
-    <div class="big" id="centerResult">四隅をタップしてください（残り <span id="left">4</span>）</div>
+    <div class="big" id="centerResult">内側の四隅をタップ（左上→右上→右下→左下）</div>
   </div>
 
   <div class="card">
-    <label>型式（例: M2 110/080 ／ 289/SV-P）</label>
+    <label>型式（例: M2a 223/193 ／ 289/SV-P）</label>
     <input id="ptype" placeholder="型式を入力（後でOCR自動化）">
-    <div class="row">
-      <button id="openGR">GRで相場を見る</button>
-    </div>
-    <a class="link" id="grLink" target="_blank" rel="noopener" hidden></a>
-    <div class="muted" style="margin-top:6px">相場はGR算定値。最終値付けはスニダン現物で。</div>
+    <div id="priceOut" class="muted" style="margin-top:10px">型式を入れると相場が出る</div>
   </div>
 
 </div>
@@ -69,20 +66,18 @@
   const hint=document.getElementById('hint');
   const centerBox=document.getElementById('centerBox');
   const centerResult=document.getElementById('centerResult');
-  const leftSpan=document.getElementById('left');
   const ptype=document.getElementById('ptype');
-  const openGR=document.getElementById('openGR');
-  const grLink=document.getElementById('grLink');
-  let stream=null, taps=[];
+  const priceOut=document.getElementById('priceOut');
+  let stream=null, taps=[], PRICES={};
+
+  fetch('prices.json?'+Date.now()).then(r=>r.json()).then(d=>{PRICES=d.cards||{};}).catch(()=>{});
 
   async function startCam(){
     try{
       stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
       video.srcObject=stream; await video.play();
       video.hidden=false; canvas.hidden=true; guide.hidden=false;
-    }catch(e){
-      hint.textContent='カメラを起動できない（HTTPSで開く必要あり）。型式入力＋GRリンクは使えます。';
-    }
+    }catch(e){ hint.textContent='カメラを起動できない。型式入力→相場は使えます。'; }
   }
 
   function capture(){
@@ -91,10 +86,9 @@
     canvas.getContext('2d').drawImage(video,0,0,w,h);
     video.hidden=true; canvas.hidden=false; guide.hidden=true;
     shot.hidden=true; retry.hidden=false;
-    centerBox.hidden=false; taps=[]; leftSpan.textContent='4';
-    centerResult.textContent='内側の四隅をタップ（左上→右上→右下→左下・残り 4）';
+    centerBox.hidden=false; taps=[];
+    centerResult.textContent='内側の四隅をタップ（残り 4）';
   }
-
   function resetShot(){
     video.hidden=false; canvas.hidden=true; guide.hidden=false;
     shot.hidden=false; retry.hidden=true; centerBox.hidden=true; taps=[];
@@ -105,39 +99,40 @@
     const r=canvas.getBoundingClientRect();
     const x=(ev.clientX-r.left)/r.width*canvas.width;
     const y=(ev.clientY-r.top)/r.height*canvas.height;
-    taps.push({x,y});
+    taps.push({x:x,y:y});
     const ctx=canvas.getContext('2d');
-    ctx.fillStyle='#4a7dff'; ctx.beginPath(); ctx.arc(x,y,8,0,7); ctx.fill();
+    ctx.fillStyle='#4a7dff'; ctx.beginPath(); ctx.arc(x,y,10,0,7); ctx.fill();
     const rem=4-taps.length;
-    if(rem>0){ leftSpan.textContent=rem; centerResult.textContent='タップ継続（残り '+rem+'）'; return; }
+    if(rem>0){ centerResult.textContent='内側の四隅をタップ（残り '+rem+'）'; return; }
     computeCentering();
   });
 
   function computeCentering(){
-    // taps: 0=左上,1=右上,2=右下,3=左下（内枠）。canvas端=カード外枠と近似
     const xs=taps.map(t=>t.x), ys=taps.map(t=>t.y);
-    const innerL=Math.min(xs), innerR=canvas.width-Math.max(xs);
-    const innerT=Math.min(ys), innerB=canvas.height-Math.max(ys);
+    const innerL=Math.min.apply(null,xs), innerR=canvas.width-Math.max.apply(null,xs);
+    const innerT=Math.min.apply(null,ys), innerB=canvas.height-Math.max.apply(null,ys);
+    if(!(innerL+innerR>0)||!(innerT+innerB>0)){ centerResult.textContent='うまく取れなかった。撮り直してタップし直して。'; return; }
     const lr=Math.round(innerL/(innerL+innerR)*100);
     const tb=Math.round(innerT/(innerT+innerB)*100);
-    centerResult.innerHTML='左右 <b>'+lr+':'+(100-lr)+'</b> ／ 上下 <b>'+tb+':'+(100-tb)+'</b><br><span class="muted">50:50に近いほど良い。PSA10狙いの目安は概ね55:45以内。</span>';
+    centerResult.innerHTML='左右 <b>'+lr+':'+(100-lr)+'</b> ／ 上下 <b>'+tb+':'+(100-tb)+'</b><br><span class="muted">50:50に近いほど良い。PSA10狙いの目安は概ね55:45以内。判定は自分の目で。</span>';
   }
 
   function slug(t){
-    return t.trim().toLowerCase().replace(/[\s/]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');
+    var s=String(t).trim().toLowerCase().replace(/[\s/]+/g,'-');
+    return s.replace(/-+/g,'-').replace(/^-|-$/g,'');
   }
-  function updateGR(){
-    const s=slug(ptype.value);
-    if(!s){ grLink.hidden=true; return; }
-    const url='https://grading.pokeca-chart.com/'+s+'/';
-    grLink.href=url; grLink.textContent=url; grLink.hidden=false;
+  function yen(v){ return (typeof v==='number') ? '¥'+v.toLocaleString() : '—'; }
+  function lookup(){
+    const k=slug(ptype.value);
+    if(!k){ priceOut.className='muted'; priceOut.textContent='型式を入れると相場が出る'; return; }
+    const c=PRICES[k];
+    if(!c){ priceOut.className='muted'; priceOut.innerHTML='「'+k+'」は未収録。<br>スニダン現物で確認を。'; return; }
+    priceOut.className='';
+    priceOut.innerHTML='<div class="name">'+(c.name||'')+'</div>'+
+      '<div class="price">PSA10 '+yen(c.psa10)+' ／ 素体 '+yen(c.sotai)+'</div>'+
+      '<div class="muted" style="margin-top:6px">出典 '+(c.src||'')+'（算定値）。最終値付けはスニダン現物で。</div>';
   }
-  openGR.addEventListener('click', function(){
-    const s=slug(ptype.value);
-    if(!s){ ptype.focus(); return; }
-    window.open('https://grading.pokeca-chart.com/'+s+'/','_blank','noopener');
-  });
-  ptype.addEventListener('input', updateGR);
+  ptype.addEventListener('input', lookup);
 
   shot.addEventListener('click', capture);
   retry.addEventListener('click', resetShot);
