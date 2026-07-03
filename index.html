@@ -27,16 +27,14 @@
   .frame .tr{ top:0; right:0; border-left:0; border-bottom:0; border-radius:0 8px 0 0; }
   .frame .bl{ bottom:0; left:0; border-right:0; border-top:0; border-radius:0 0 0 8px; }
   .frame .br{ bottom:0; right:0; border-left:0; border-top:0; border-radius:0 0 8px 0; }
-  /* 水平器 */
+  /* 水平器（回転ロール基準の＋クロスヘア） */
   .lvl{ position:absolute; inset:0; pointer-events:none; }
-  .lvl .h{ position:absolute; left:18%; right:18%; top:50%; height:2px; background:rgba(255,255,255,.55); transform:translateY(-50%); }
-  .lvl .v{ position:absolute; top:38%; bottom:38%; left:50%; width:2px; background:rgba(255,255,255,.55); transform:translateX(-50%); }
-  .lvl .ring{ position:absolute; left:50%; top:50%; width:74px; height:74px; margin:-37px 0 0 -37px; border:2px solid rgba(255,255,255,.5); border-radius:50%; }
-  .lvl .bub{ position:absolute; left:50%; top:50%; width:26px; height:26px; margin:-13px 0 0 -13px; border-radius:50%;
-    background:rgba(255,80,80,.85); box-shadow:0 0 10px rgba(255,60,60,.7); transition:transform .06s linear; }
-  .lvl.level .bub{ background:rgba(34,197,94,.95); box-shadow:0 0 14px rgba(34,197,94,.9); }
-  .lvl.level .h,.lvl.level .v,.lvl.level .ring{ background:var(--good); border-color:var(--good); }
-  .lvl.level .h,.lvl.level .v{ box-shadow:0 0 6px rgba(34,197,94,.8); }
+  .lvl .cg{ position:absolute; left:50%; top:50%; width:66%; height:66%; transform:translate(-50%,-50%) rotate(0deg); transition:transform .05s linear; }
+  .lvl .cg .h{ position:absolute; left:0; right:0; top:50%; height:2px; background:rgba(255,255,255,.6); transform:translateY(-50%); box-shadow:0 0 2px rgba(0,0,0,.4); }
+  .lvl .cg .v{ position:absolute; top:0; bottom:0; left:50%; width:2px; background:rgba(255,255,255,.6); transform:translateX(-50%); box-shadow:0 0 2px rgba(0,0,0,.4); }
+  .lvl .cg .dot{ position:absolute; left:50%; top:50%; width:12px; height:12px; margin:-6px 0 0 -6px; border:2px solid rgba(255,255,255,.7); border-radius:50%; }
+  .lvl.level .cg .h,.lvl.level .cg .v{ background:var(--good); box-shadow:0 0 6px rgba(34,197,94,.8); }
+  .lvl.level .cg .dot{ border-color:var(--good); box-shadow:0 0 6px rgba(34,197,94,.7); }
   .live{ position:absolute; left:0; right:0; bottom:10px; text-align:center; color:#fff; font-size:12px; font-weight:700; text-shadow:0 1px 5px rgba(0,0,0,.7); }
   .shutter{ display:grid; place-items:center; margin:16px 0 6px; }
   .shutter button{ width:74px; height:74px; border-radius:50%; border:0; background:linear-gradient(135deg,var(--brand1),var(--brand2)); box-shadow:var(--shadow); position:relative; }
@@ -75,7 +73,7 @@
     <video id="video" playsinline muted></video>
     <canvas id="canvas" hidden></canvas>
     <div class="frame"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
-    <div class="lvl" id="lvl"><div class="h"></div><div class="v"></div><div class="ring"></div><div class="bub" id="bub"></div></div>
+    <div class="lvl" id="lvl"><div class="cg" id="crossG"><div class="h"></div><div class="v"></div><div class="dot"></div></div></div>
     <div class="live" id="live">水平を合わせて撮影</div>
   </div>
 
@@ -107,7 +105,7 @@
 <script>
 (function(){
   var $=function(id){return document.getElementById(id);};
-  var video=$('video'),canvas=$('canvas'),lvl=$('lvl'),bub=$('bub'),live=$('live');
+  var video=$('video'),canvas=$('canvas'),lvl=$('lvl'),crossG=$('crossG'),live=$('live');
   var shot=$('shot'),retry=$('retry'),centerBox=$('centerBox'),centerHint=$('centerHint'),centerViz=$('centerViz');
   var lrFill=$('lrFill'),tbFill=$('tbFill'),lrText=$('lrText'),tbText=$('tbText'),verdict=$('verdict'),psaBadge=$('psaBadge'),srcTag=$('srcTag');
   var ptype=$('ptype'),priceOut=$('priceOut'),manual=$('manual');
@@ -125,17 +123,17 @@
         if(adv.length) track.applyConstraints({advanced:adv}); }catch(e){}
     }).catch(function(){ live.textContent='カメラ不可（型式→相場は使えます）'; });
 
-  /* ---------- 水平器（加速度＝バブル。寝かせても立てても効く） ---------- */
+  /* ---------- 水平器（回転ロール基準。立てても寝かせても効く） ----------
+     x=左右方向の重力成分。x=0 のときカードの縦横と枠が平行（回転ズレなし）。姿勢に依存しない。 */
   var gotMotion=false;
   function onMotion(e){
     var a=e.accelerationIncludingGravity||e.acceleration; if(!a) return;
     var x=a.x||0, y=a.y||0, z=a.z||0;
     gotMotion=true;
-    var tilt=Math.atan2(Math.hypot(x,y),Math.abs(z))*180/Math.PI; // 0=完全に平行
-    var px=Math.max(-30,Math.min(30,-x*4)), py=Math.max(-30,Math.min(30,y*4));
-    bub.style.transform='translate('+px+'px,'+py+'px)';
-    if(tilt<5){ lvl.classList.add('level'); live.textContent='水平OK ✓ 撮影して測定'; }
-    else { lvl.classList.remove('level'); live.textContent='傾き '+Math.round(tilt)+'° → 平行に近づけて'; }
+    var roll=Math.atan2(x,Math.hypot(y,z))*180/Math.PI; // 左右の回転ズレ（-90..90）
+    crossG.style.transform='translate(-50%,-50%) rotate('+(-roll)+'deg)';
+    if(Math.abs(roll)<4){ lvl.classList.add('level'); live.textContent='水平OK ✓ 撮影して測定'; }
+    else { lvl.classList.remove('level'); live.textContent=(roll>0?'右':'左')+'に '+Math.round(Math.abs(roll))+'° 傾き → まっすぐに'; }
   }
   function enableSensors(){
     var DM=window.DeviceMotionEvent;
