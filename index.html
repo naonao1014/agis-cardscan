@@ -77,6 +77,7 @@
     <div class="live" id="live">水平を合わせて撮影</div>
   </div>
 
+  <div class="mini"><button id="lvlBtn">📐 傾きセンサーを有効化</button></div>
   <div class="shutter"><button id="shot" aria-label="撮影"></button></div>
   <div class="mini"><button id="retry" hidden>↺ 撮り直す</button></div>
 
@@ -97,7 +98,8 @@
   <div class="card">
     <h3>相場</h3>
     <label>型式（例: M2a 223/193 ／ 289/SV-P）</label>
-    <input id="ptype" placeholder="型式を入力（後でOCR自動化）">
+    <input id="ptype" placeholder="型式を入力 or 下のボタンで読取">
+    <div class="mini" style="justify-content:flex-start;margin-top:8px"><button id="ocrBtn" disabled>📷 撮影画像から型式を読取（OCR）</button></div>
     <div id="priceOut" class="empty">型式を入れると相場が出る</div>
   </div>
 </div>
@@ -108,7 +110,7 @@
   var video=$('video'),canvas=$('canvas'),lvl=$('lvl'),crossG=$('crossG'),live=$('live');
   var shot=$('shot'),retry=$('retry'),centerBox=$('centerBox'),centerHint=$('centerHint'),centerViz=$('centerViz');
   var lrFill=$('lrFill'),tbFill=$('tbFill'),lrText=$('lrText'),tbText=$('tbText'),verdict=$('verdict'),psaBadge=$('psaBadge'),srcTag=$('srcTag');
-  var ptype=$('ptype'),priceOut=$('priceOut'),manual=$('manual');
+  var ptype=$('ptype'),priceOut=$('priceOut'),manual=$('manual'),ocrBtn=$('ocrBtn');
   var PRICES={}, taps=[], tapMode=false;
 
   fetch('prices.json?'+Date.now()).then(function(r){return r.json();}).then(function(d){PRICES=d.cards||{};}).catch(function(){});
@@ -124,17 +126,35 @@
     }).catch(function(){ live.textContent='カメラ不可（型式→相場は使えます）'; });
 
   /* ---------- 水平器（回転ロール基準。立てても寝かせても効く） ----------
-     x=左右方向の重力成分。x=0 のときカードの縦横と枠が平行（回転ズレなし）。姿勢に依存しない。 */
-  var gotMotion=false;
-  function onMotion(e){
-    var a=e.accelerationIncludingGravity||e.acceleration; if(!a) return;
-    var x=a.x||0, y=a.y||0, z=a.z||0;
-    gotMotion=true;
-    var roll=Math.atan2(x,Math.hypot(y,z))*180/Math.PI; // 左右の回転ズレ（-90..90）
+     deviceorientation の gamma（左右回転）を第一。無ければ devicemotion の重力から算出。 */
+  var lvlBtn=$('lvlBtn'), gotSensor=false, sensorOn=false;
+  function applyRoll(roll){
+    gotSensor=true;
     crossG.style.transform='translate(-50%,-50%) rotate('+(-roll)+'deg)';
     if(Math.abs(roll)<4){ lvl.classList.add('level'); live.textContent='水平OK ✓ 撮影して測定'; }
     else { lvl.classList.remove('level'); live.textContent=(roll>0?'右':'左')+'に '+Math.round(Math.abs(roll))+'° 傾き → まっすぐに'; }
   }
+  function onOri(e){ if(e.gamma==null) return; applyRoll(e.gamma); }
+  function onMotion(e){
+    var a=e.accelerationIncludingGravity||e.acceleration; if(!a||a.x==null) return;
+    applyRoll(Math.atan2(a.x,Math.hypot(a.y||0,a.z||0))*180/Math.PI);
+  }
+  function attach(){ window.addEventListener('deviceorientation',onOri); window.addEventListener('devicemotion',onMotion); }
+  function enableSensors(){
+    if(sensorOn) return; sensorOn=true;
+    var reqs=[];
+    if(window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission) reqs.push(DeviceOrientationEvent.requestPermission());
+    if(window.DeviceMotionEvent && DeviceMotionEvent.requestPermission) reqs.push(DeviceMotionEvent.requestPermission());
+    if(reqs.length){
+      Promise.all(reqs.map(function(p){return p.catch(function(){return 'error';});})).then(function(res){
+        if(res.indexOf('granted')>=0){ attach(); lvlBtn.style.display='none'; }
+        else { sensorOn=false; live.textContent='センサー拒否 → 設定→Safari→「モーションとオリエンテーション」をON'; }
+      });
+    } else { attach(); lvlBtn.style.display='none'; }
+    setTimeout(function(){ if(!gotSensor){ lvl.style.opacity='.35'; live.textContent='傾きセンサー未対応：目視で水平に'; sensorOn=false; } },1800);
+  }
+  lvlBtn.addEventListener('click',enableSensors);
+  document.addEventListener('pointerdown',function once(){ enableSensors(); document.removeEventListener('pointerdown',once); });
   function enableSensors(){
     var DM=window.DeviceMotionEvent;
     if(DM && DM.requestPermission){ DM.requestPermission().then(function(s){ if(s==='granted') window.addEventListener('devicemotion',onMotion); }).catch(function(){}); }
@@ -150,6 +170,7 @@
     video.hidden=true; canvas.hidden=false; lvl.style.display='none'; live.style.display='none';
     shot.parentElement.style.display='none'; retry.hidden=false;
     centerBox.hidden=false; centerViz.hidden=true; centerHint.hidden=false; centerHint.textContent='自動解析中…'; taps=[]; tapMode=false;
+    ocrBtn.disabled=false;
     setTimeout(autoCenter,30);
   }
   function resetShot(){
@@ -246,6 +267,47 @@
       '<div class="pill raw"><div class="k">素体</div><div class="v">'+yen(c.sotai)+'</div></div></div>'+
       '<div class="src">出典 '+(c.src||'')+'（算定値）・最終値付けはスニダン現物で</div>';
   }
+
+  /* ---------- 型式OCR（Tesseract.jsを押した時だけ遅延ロード） ---------- */
+  var ocrReady=null;
+  function loadOCR(){
+    if(ocrReady) return ocrReady;
+    ocrReady=new Promise(function(res,rej){
+      var s=document.createElement('script');
+      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+      s.onload=function(){res(window.Tesseract);}; s.onerror=function(){rej();};
+      document.head.appendChild(s);
+    });
+    return ocrReady;
+  }
+  function cropBottom(){ // カード下部の番号帯だけ切り出し（下22%）
+    var W=canvas.width,H=canvas.height, ch=Math.round(H*0.22), cy=H-ch;
+    var t=document.createElement('canvas'); t.width=W; t.height=ch;
+    var tc=t.getContext('2d'); tc.drawImage(canvas,0,cy,W,ch,0,0,W,ch);
+    // 拡大＋グレースケール強調で読みやすく
+    var up=document.createElement('canvas'); var sc=Math.min(3,1400/W); up.width=W*sc; up.height=ch*sc;
+    var uc=up.getContext('2d'); uc.imageSmoothingEnabled=true; uc.drawImage(t,0,0,up.width,up.height);
+    return up;
+  }
+  function extractType(text){
+    var s=(text||'').replace(/\s+/g,' ');
+    var m=s.match(/\b(\d{1,3})\s*\/\s*([0-9A-Z\-]{1,7})\b/i); // 223/193, 289/SV-P 等
+    return m?(m[1]+'/'+m[2].toUpperCase()):null;
+  }
+  ocrBtn.addEventListener('click',function(){
+    if(canvas.hidden){ priceOut.className='empty'; priceOut.textContent='先に撮影して'; return; }
+    ocrBtn.disabled=true; priceOut.className='empty'; priceOut.textContent='OCR準備中…（初回だけ読込に数秒）';
+    loadOCR().then(function(T){
+      priceOut.textContent='読取中…';
+      return T.recognize(cropBottom(),'eng',{tessedit_char_whitelist:'0123456789/SVP-',tessedit_pageseg_mode:'6'});
+    }).then(function(r){
+      var raw=(r&&r.data&&r.data.text)||'';
+      var t=extractType(raw);
+      ocrBtn.disabled=false;
+      if(t){ ptype.value=t; lookup(); }
+      else { priceOut.className='empty'; priceOut.innerHTML='<span class="chip" style="background:#fff0f4;color:#e11d63">読取失敗</span> 型式帯が写ってない/不鮮明。手入力で（読めた文字: '+raw.replace(/[<>]/g,'').trim().slice(0,20)+'）'; }
+    }).catch(function(){ ocrBtn.disabled=false; priceOut.className='empty'; priceOut.textContent='OCR読込に失敗（通信環境）。手入力で。'; });
+  });
 
   ptype.addEventListener('input',lookup);
   shot.addEventListener('click',capture);
