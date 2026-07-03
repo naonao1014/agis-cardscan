@@ -27,10 +27,16 @@
   .frame .tr{ top:0; right:0; border-left:0; border-bottom:0; border-radius:0 8px 0 0; }
   .frame .bl{ bottom:0; left:0; border-right:0; border-top:0; border-radius:0 0 0 8px; }
   .frame .br{ bottom:0; right:0; border-left:0; border-top:0; border-radius:0 0 8px 0; }
-  .cross{ position:absolute; inset:0; pointer-events:none; }
-  .cross .h{ position:absolute; left:15%; right:15%; top:50%; height:2px; background:rgba(255,255,255,.7); transform-origin:center; transform:translateY(-50%); }
-  .cross .v{ position:absolute; top:44%; bottom:44%; left:50%; width:2px; background:rgba(255,255,255,.7); transform:translateX(-50%); }
-  .cross.level .h,.cross.level .v{ background:var(--good); box-shadow:0 0 6px rgba(34,197,94,.8); }
+  /* 水平器 */
+  .lvl{ position:absolute; inset:0; pointer-events:none; }
+  .lvl .h{ position:absolute; left:18%; right:18%; top:50%; height:2px; background:rgba(255,255,255,.55); transform:translateY(-50%); }
+  .lvl .v{ position:absolute; top:38%; bottom:38%; left:50%; width:2px; background:rgba(255,255,255,.55); transform:translateX(-50%); }
+  .lvl .ring{ position:absolute; left:50%; top:50%; width:74px; height:74px; margin:-37px 0 0 -37px; border:2px solid rgba(255,255,255,.5); border-radius:50%; }
+  .lvl .bub{ position:absolute; left:50%; top:50%; width:26px; height:26px; margin:-13px 0 0 -13px; border-radius:50%;
+    background:rgba(255,80,80,.85); box-shadow:0 0 10px rgba(255,60,60,.7); transition:transform .06s linear; }
+  .lvl.level .bub{ background:rgba(34,197,94,.95); box-shadow:0 0 14px rgba(34,197,94,.9); }
+  .lvl.level .h,.lvl.level .v,.lvl.level .ring{ background:var(--good); border-color:var(--good); }
+  .lvl.level .h,.lvl.level .v{ box-shadow:0 0 6px rgba(34,197,94,.8); }
   .live{ position:absolute; left:0; right:0; bottom:10px; text-align:center; color:#fff; font-size:12px; font-weight:700; text-shadow:0 1px 5px rgba(0,0,0,.7); }
   .shutter{ display:grid; place-items:center; margin:16px 0 6px; }
   .shutter button{ width:74px; height:74px; border-radius:50%; border:0; background:linear-gradient(135deg,var(--brand1),var(--brand2)); box-shadow:var(--shadow); position:relative; }
@@ -41,6 +47,7 @@
   .card{ background:var(--card); border:1px solid var(--line); border-radius:18px; padding:16px; margin-top:14px; box-shadow:var(--shadow); }
   .card h3{ margin:0 0 10px; font-size:13px; color:var(--sub); font-weight:700; letter-spacing:.4px; text-transform:uppercase; }
   .psaBadge{ display:inline-block; font-size:26px; font-weight:800; padding:2px 16px; border-radius:14px; color:#fff; }
+  .srcTag{ font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; margin-left:8px; vertical-align:middle; }
   .barwrap{ margin:10px 0; } .barlabel{ display:flex; justify-content:space-between; font-size:13px; font-weight:700; margin-bottom:6px; }
   .bar{ position:relative; height:12px; border-radius:999px; background:#eef0f8; overflow:hidden; }
   .bar .fill{ position:absolute; inset:0 auto 0 0; border-radius:999px; width:50%; }
@@ -68,7 +75,7 @@
     <video id="video" playsinline muted></video>
     <canvas id="canvas" hidden></canvas>
     <div class="frame"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
-    <div class="cross" id="cross"><div class="h" id="crossH"></div><div class="v"></div></div>
+    <div class="lvl" id="lvl"><div class="h"></div><div class="v"></div><div class="ring"></div><div class="bub" id="bub"></div></div>
     <div class="live" id="live">水平を合わせて撮影</div>
   </div>
 
@@ -77,14 +84,15 @@
 
   <div class="card" id="centerBox" hidden>
     <h3>センタリング / PSA推定</h3>
-    <div id="centerHint" class="empty">内側の四隅を 左上→右上→右下→左下 の順にタップ（残り 4）</div>
+    <div id="centerHint" class="empty">解析中…</div>
     <div id="centerViz" hidden>
-      <div style="margin-bottom:10px"><span class="psaBadge" id="psaBadge">–</span></div>
+      <div style="margin-bottom:10px"><span class="psaBadge" id="psaBadge">–</span><span class="srcTag" id="srcTag"></span></div>
       <div class="barwrap"><div class="barlabel"><span>左右</span><span id="lrText">–</span></div>
         <div class="bar"><div class="fill" id="lrFill"></div><div class="c1"></div><div class="c2"></div></div></div>
       <div class="barwrap"><div class="barlabel"><span>上下</span><span id="tbText">–</span></div>
         <div class="bar"><div class="fill" id="tbFill"></div><div class="c1"></div><div class="c2"></div></div></div>
       <div class="verdict" id="verdict"></div>
+      <div class="mini" style="margin-top:12px"><button id="manual">四隅を手動タップで測り直す</button></div>
     </div>
   </div>
 
@@ -99,15 +107,15 @@
 <script>
 (function(){
   var $=function(id){return document.getElementById(id);};
-  var video=$('video'),canvas=$('canvas'),cross=$('cross'),crossH=$('crossH'),live=$('live');
+  var video=$('video'),canvas=$('canvas'),lvl=$('lvl'),bub=$('bub'),live=$('live');
   var shot=$('shot'),retry=$('retry'),centerBox=$('centerBox'),centerHint=$('centerHint'),centerViz=$('centerViz');
-  var lrFill=$('lrFill'),tbFill=$('tbFill'),lrText=$('lrText'),tbText=$('tbText'),verdict=$('verdict'),psaBadge=$('psaBadge');
-  var ptype=$('ptype'),priceOut=$('priceOut');
-  var PRICES={}, taps=[];
+  var lrFill=$('lrFill'),tbFill=$('tbFill'),lrText=$('lrText'),tbText=$('tbText'),verdict=$('verdict'),psaBadge=$('psaBadge'),srcTag=$('srcTag');
+  var ptype=$('ptype'),priceOut=$('priceOut'),manual=$('manual');
+  var PRICES={}, taps=[], tapMode=false;
 
   fetch('prices.json?'+Date.now()).then(function(r){return r.json();}).then(function(d){PRICES=d.cards||{};}).catch(function(){});
 
-  // カメラ（高解像度＋オートフォーカス）
+  /* ---------- カメラ ---------- */
   navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1440}},audio:false})
     .then(function(stream){
       video.srcObject=stream; video.play();
@@ -117,64 +125,116 @@
         if(adv.length) track.applyConstraints({advanced:adv}); }catch(e){}
     }).catch(function(){ live.textContent='カメラ不可（型式→相場は使えます）'; });
 
-  // 水平クロスヘア（傾きセンサー・激軽）
-  function onOri(e){
-    var g=e.gamma||0;
-    crossH.style.transform='translateY(-50%) rotate('+(-g)+'deg)';
-    if(Math.abs(g)<3){ cross.classList.add('level'); live.textContent='水平OK ✓ 撮影して四隅をタップ'; }
-    else { cross.classList.remove('level'); live.textContent='左右に傾き '+Math.round(g)+'° 水平に'; }
+  /* ---------- 水平器（加速度＝バブル。寝かせても立てても効く） ---------- */
+  var gotMotion=false;
+  function onMotion(e){
+    var a=e.accelerationIncludingGravity||e.acceleration; if(!a) return;
+    var x=a.x||0, y=a.y||0, z=a.z||0;
+    gotMotion=true;
+    var tilt=Math.atan2(Math.hypot(x,y),Math.abs(z))*180/Math.PI; // 0=完全に平行
+    var px=Math.max(-30,Math.min(30,-x*4)), py=Math.max(-30,Math.min(30,y*4));
+    bub.style.transform='translate('+px+'px,'+py+'px)';
+    if(tilt<5){ lvl.classList.add('level'); live.textContent='水平OK ✓ 撮影して測定'; }
+    else { lvl.classList.remove('level'); live.textContent='傾き '+Math.round(tilt)+'° → 平行に近づけて'; }
   }
-  function enableTilt(){
-    if(window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission){
-      DeviceOrientationEvent.requestPermission().then(function(s){ if(s==='granted') window.addEventListener('deviceorientation',onOri); }).catch(function(){});
-    } else if(window.DeviceOrientationEvent){ window.addEventListener('deviceorientation',onOri); }
+  function enableSensors(){
+    var DM=window.DeviceMotionEvent;
+    if(DM && DM.requestPermission){ DM.requestPermission().then(function(s){ if(s==='granted') window.addEventListener('devicemotion',onMotion); }).catch(function(){}); }
+    else if(DM){ window.addEventListener('devicemotion',onMotion); }
+    setTimeout(function(){ if(!gotMotion){ lvl.style.opacity='.35'; if(live.textContent.indexOf('傾き')<0 && live.textContent.indexOf('OK')<0) live.textContent='傾きセンサー未対応：目視で水平に'; } },1400);
   }
-  document.addEventListener('pointerdown',function once(){ enableTilt(); document.removeEventListener('pointerdown',once); },{once:true});
+  document.addEventListener('pointerdown',function once(){ enableSensors(); document.removeEventListener('pointerdown',once); });
 
+  /* ---------- 撮影 ---------- */
   function capture(){
     var w=video.videoWidth||720,h=video.videoHeight||960;
     canvas.width=w; canvas.height=h; canvas.getContext('2d').drawImage(video,0,0,w,h);
-    video.hidden=true; canvas.hidden=false; cross.style.display='none'; live.style.display='none';
+    video.hidden=true; canvas.hidden=false; lvl.style.display='none'; live.style.display='none';
     shot.parentElement.style.display='none'; retry.hidden=false;
-    centerBox.hidden=false; centerViz.hidden=true; centerHint.hidden=false; centerHint.textContent='内側の四隅をタップ（残り 4）'; taps=[];
+    centerBox.hidden=false; centerViz.hidden=true; centerHint.hidden=false; centerHint.textContent='自動解析中…'; taps=[]; tapMode=false;
+    setTimeout(autoCenter,30);
   }
   function resetShot(){
-    video.hidden=false; canvas.hidden=true; cross.style.display=''; live.style.display='';
-    shot.parentElement.style.display=''; retry.hidden=true; centerBox.hidden=true; taps=[];
+    video.hidden=false; canvas.hidden=true; lvl.style.display=''; lvl.style.opacity=''; live.style.display='';
+    shot.parentElement.style.display=''; retry.hidden=true; centerBox.hidden=true; taps=[]; tapMode=false;
   }
+
+  /* ---------- 自動センタリング（静止画に1回・軽量スキャンライン） ---------- */
+  function autoCenter(){
+    try{
+      var W=canvas.width,H=canvas.height;
+      var sw=360, sh=Math.round(H*sw/W);
+      var t=document.createElement('canvas'); t.width=sw; t.height=sh;
+      var tc=t.getContext('2d'); tc.drawImage(canvas,0,0,sw,sh);
+      var d=tc.getImageData(0,0,sw,sh).data;
+      function lumAt(x,y){ var i=(y*sw+x)*4; return (d[i]*.30+d[i+1]*.59+d[i+2]*.11); }
+      // 中央帯を平均してノイズ低減 → 各軸の輝度勾配ピークを検出
+      function rowProfile(y0,y1){ var p=new Float32Array(sw); for(var x=0;x<sw;x++){ var s=0,n=0; for(var y=y0;y<y1;y++){s+=lumAt(x,y);n++;} p[x]=s/n; } return p; }
+      function colProfile(x0,x1){ var p=new Float32Array(sh); for(var y=0;y<sh;y++){ var s=0,n=0; for(var x=x0;x<x1;x++){s+=lumAt(x,y);n++;} p[y]=s/n; } return p; }
+      function edges(p){ // 勾配→非極大抑制→強い順の位置
+        var n=p.length,g=new Float32Array(n),mx=0;
+        for(var i=1;i<n-1;i++){ g[i]=Math.abs(p[i+1]-p[i-1]); if(g[i]>mx)mx=g[i]; }
+        if(mx<8) return [];
+        var th=mx*0.35, out=[];
+        for(var i=2;i<n-2;i++){ if(g[i]>=th && g[i]>=g[i-1] && g[i]>=g[i+1] && g[i]>=g[i-2] && g[i]>=g[i+2]) out.push(i); }
+        return out;
+      }
+      var rp=rowProfile((sh*0.42)|0,(sh*0.58)|0), cp=colProfile((sw*0.42)|0,(sw*0.58)|0);
+      var ex=edges(rp), ey=edges(cp);
+      // 各辺の外端(カード縁)と内端(絵柄枠)＝両側から2本ずつ
+      if(ex.length<4 || ey.length<4){ manualPrompt('自動検出できず（枠が薄い/全面イラスト等）。'); return; }
+      var oL=ex[0], iL=ex[1], iR=ex[ex.length-2], oR=ex[ex.length-1];
+      var oT=ey[0], iT=ey[1], iB=ey[ey.length-2], oB=ey[ey.length-1];
+      var Lb=iL-oL, Rb=oR-iR, Tb=iT-oT, Bb=oB-iB;
+      if(Lb<3||Rb<3||Tb<3||Bb<3||(Lb+Rb)<10||(Tb+Bb)<10){ manualPrompt('枠幅が取れず自動不可。'); return; }
+      var lr=Math.round(Lb/(Lb+Rb)*100), tb=Math.round(Tb/(Tb+Bb)*100);
+      showResult(lr,tb,'auto');
+    }catch(e){ manualPrompt('自動解析に失敗。'); }
+  }
+  function manualPrompt(msg){
+    centerViz.hidden=true; centerHint.hidden=false;
+    centerHint.textContent=(msg||'')+'内側の四隅を 左上→右上→右下→左下 の順にタップ（残り 4）';
+    tapMode=true; taps=[];
+  }
+
+  /* ---------- 手動タップ測定 ---------- */
   canvas.addEventListener('pointerdown',function(ev){
-    if(canvas.hidden||centerHint.hidden) return;
+    if(canvas.hidden||!tapMode) return;
     ev.preventDefault();
     var r=canvas.getBoundingClientRect();
     var x=(ev.clientX-r.left)/r.width*canvas.width, y=(ev.clientY-r.top)/r.height*canvas.height;
     taps.push({x:x,y:y});
-    var ctx=canvas.getContext('2d'); ctx.fillStyle='#6d5cff'; ctx.beginPath(); ctx.arc(x,y,12,0,7); ctx.fill();
+    var ctx=canvas.getContext('2d'); ctx.fillStyle='#6d5cff'; ctx.beginPath(); ctx.arc(x,y,Math.max(8,canvas.width*0.012),0,7); ctx.fill();
     var rem=4-taps.length;
     if(rem>0){ centerHint.textContent='内側の四隅をタップ（残り '+rem+'）'; return; }
     var xs=taps.map(function(t){return t.x;}), ys=taps.map(function(t){return t.y;});
     var L=Math.min.apply(null,xs), R=canvas.width-Math.max.apply(null,xs), T=Math.min.apply(null,ys), B=canvas.height-Math.max.apply(null,ys);
     if(!(L+R>0)||!(T+B>0)){ centerHint.textContent='うまく取れず。四隅をタップし直して。'; taps=[]; return; }
-    showResult(Math.round(L/(L+R)*100), Math.round(T/(T+B)*100));
+    tapMode=false;
+    showResult(Math.round(L/(L+R)*100), Math.round(T/(T+B)*100),'manual');
   });
 
   function qcolor(p){ var o=Math.abs(p-50); return o<=5?'var(--good)':(o<=10?'var(--warn)':'var(--bad)'); }
   function psaEst(lr,tb){
-    var worst=Math.max(Math.abs(lr-50),Math.abs(tb-50));  // 5 = 55:45
-    if(worst<=5) return {g:'10',c:'var(--good)',n:'センタリングはPSA10圏（55:45以内）'};
+    var worst=Math.max(Math.abs(lr-50),Math.abs(tb-50)); // 5 = 55:45
+    if(worst<=5) return {g:'10',c:'var(--good)',n:'センタリングはPSA10圏（両軸55:45以内）'};
     if(worst<=10) return {g:'9',c:'var(--warn)',n:'PSA10は不可（60:40圏）'};
     if(worst<=15) return {g:'8',c:'var(--bad)',n:'ズレ大（65:35圏）'};
     return {g:'≤7',c:'var(--bad)',n:'センタリング大きくズレ'};
   }
-  function showResult(lr,tb){
+  function showResult(lr,tb,src){
     centerHint.hidden=true; centerViz.hidden=false;
     lrText.textContent=lr+' : '+(100-lr); tbText.textContent=tb+' : '+(100-tb);
     lrFill.style.width=lr+'%'; lrFill.style.background=qcolor(lr);
     tbFill.style.width=tb+'%'; tbFill.style.background=qcolor(tb);
     var e=psaEst(lr,tb);
     psaBadge.textContent='PSA '+e.g; psaBadge.style.background=e.c;
+    if(src==='auto'){ srcTag.textContent='自動推定・要確認'; srcTag.style.background='#fff4e5'; srcTag.style.color='#b45309'; }
+    else { srcTag.textContent='手動タップ'; srcTag.style.background='#eaf7ee'; srcTag.style.color='#15803d'; }
     verdict.textContent=e.n+'　※角・エッジ・傷は別途。最終は自分の目で';
   }
 
+  /* ---------- 相場 ---------- */
   function slug(t){ return String(t).trim().toLowerCase().replace(/[\s/]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,''); }
   function yen(v){ return (typeof v==='number')?'¥'+v.toLocaleString():'—'; }
   function lookup(){
@@ -192,6 +252,10 @@
   ptype.addEventListener('input',lookup);
   shot.addEventListener('click',capture);
   retry.addEventListener('click',resetShot);
+  manual.addEventListener('click',function(){ // 再タップのため静止画を描き直す
+    var w=canvas.width,h=canvas.height; // 既存画像の上に丸が残るので撮り直し扱いはしない：画像はそのまま、丸だけ気にせず測る
+    manualPrompt('');
+  });
 })();
 </script>
 </body>
