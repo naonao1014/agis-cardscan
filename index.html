@@ -2,140 +2,204 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>AgiS カード検品</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#6d5cff">
+<title>AgiS — カードスキャン</title>
 <style>
-  :root{ --bg:#0f1420; --panel:#1a2130; --line:#2a3346; --txt:#e6e9ef; --sub:#8b93a7; --accent:#4a7dff; --good:#4ade80; }
-  *{ box-sizing:border-box; }
-  body{ margin:0; background:var(--bg); color:var(--txt); font-family:'Segoe UI','Meiryo',sans-serif; }
-  header{ padding:12px 16px; font-weight:700; border-bottom:1px solid var(--line); }
-  .wrap{ padding:16px; max-width:560px; margin:0 auto; }
-  .stage{ position:relative; width:100%; aspect-ratio:3/4; background:#000; border-radius:12px; overflow:hidden; }
+  :root{
+    --ink:#161a2b; --sub:#6b7186; --line:#e7e9f4; --card:#ffffff;
+    --brand1:#6d5cff; --brand2:#a855f7; --pink:#ff5c93; --cyan:#12c2e9;
+    --good:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+    --shadow:0 10px 30px rgba(60,50,120,.12);
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; }
+  body{
+    font-family:'Segoe UI','Hiragino Kaku Gothic ProN','Meiryo',sans-serif; color:var(--ink);
+    background:radial-gradient(1200px 600px at 50% -10%, #efeaff 0%, #f6f7fc 40%, #f6f7fc 100%);
+    min-height:100vh;
+  }
+  .app{ max-width:520px; margin:0 auto; padding:16px 16px 40px; }
+  .top{ display:flex; align-items:center; gap:10px; padding:6px 2px 14px; }
+  .logo{ width:38px; height:38px; border-radius:12px; background:linear-gradient(135deg,var(--brand1),var(--brand2));
+    display:grid; place-items:center; color:#fff; font-size:20px; box-shadow:var(--shadow); }
+  .brand{ font-weight:800; font-size:18px; letter-spacing:.3px; }
+  .brand small{ display:block; font-weight:600; font-size:11px; color:var(--sub); letter-spacing:.5px; }
+
+  .stage{ position:relative; width:100%; aspect-ratio:3/4; border-radius:22px; overflow:hidden;
+    background:#0c0e18; box-shadow:var(--shadow); }
   video,canvas{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
   canvas{ touch-action:none; }
-  .guide{ position:absolute; inset:8%; border:2px dashed rgba(255,255,255,.55); border-radius:8px; pointer-events:none; }
-  .hint{ color:var(--sub); font-size:12px; margin:8px 2px; }
-  .row{ display:flex; gap:8px; margin-top:12px; }
-  button{ flex:1; padding:12px; border:0; border-radius:10px; background:var(--accent); color:#fff; font-size:15px; font-weight:600; }
-  button.sub{ background:var(--panel); border:1px solid var(--line); color:var(--txt); }
-  .card{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; margin-top:14px; }
-  label{ display:block; color:var(--sub); font-size:12px; margin-bottom:4px; }
-  input{ width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:#0f1420; color:var(--txt); font-size:16px; }
-  .big{ font-size:22px; font-weight:700; }
-  .price{ font-size:20px; font-weight:700; }
-  .muted{ color:var(--sub); font-size:12px; }
-  .name{ font-size:15px; font-weight:600; margin-bottom:6px; }
+  .frame{ position:absolute; inset:7%; pointer-events:none; }
+  .frame i{ position:absolute; width:26px; height:26px; border:3px solid #fff; opacity:.9; }
+  .frame .tl{ top:0; left:0; border-right:0; border-bottom:0; border-radius:8px 0 0 0; }
+  .frame .tr{ top:0; right:0; border-left:0; border-bottom:0; border-radius:0 8px 0 0; }
+  .frame .bl{ bottom:0; left:0; border-right:0; border-top:0; border-radius:0 0 0 8px; }
+  .frame .br{ bottom:0; right:0; border-left:0; border-top:0; border-radius:0 0 8px 0; }
+  .scanhint{ position:absolute; left:0; right:0; bottom:12px; text-align:center; color:#fff;
+    font-size:12px; text-shadow:0 1px 4px rgba(0,0,0,.6); }
+
+  .shutter{ display:grid; place-items:center; margin:16px 0 6px; }
+  .shutter button{ width:74px; height:74px; border-radius:50%; border:0; cursor:pointer;
+    background:linear-gradient(135deg,var(--brand1),var(--brand2)); box-shadow:var(--shadow);
+    position:relative; }
+  .shutter button::after{ content:""; position:absolute; inset:6px; border-radius:50%; border:3px solid rgba(255,255,255,.9); }
+  .shutter button:active{ transform:scale(.94); }
+  .mini{ display:flex; gap:8px; justify-content:center; margin-top:8px; }
+  .mini button{ padding:9px 16px; border-radius:999px; border:1px solid var(--line); background:#fff; color:var(--ink);
+    font-weight:600; font-size:13px; }
+
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:18px; padding:16px; margin-top:14px;
+    box-shadow:var(--shadow); }
+  .card h3{ margin:0 0 10px; font-size:13px; color:var(--sub); font-weight:700; letter-spacing:.4px; text-transform:uppercase; }
+
+  .barwrap{ margin:10px 0; }
+  .barlabel{ display:flex; justify-content:space-between; font-size:13px; font-weight:700; margin-bottom:6px; }
+  .bar{ position:relative; height:12px; border-radius:999px; background:#eef0f8; overflow:hidden; }
+  .bar .fill{ position:absolute; inset:0 auto 0 0; border-radius:999px; }
+  .bar .center{ position:absolute; top:-3px; bottom:-3px; left:50%; width:2px; background:rgba(0,0,0,.25); }
+  .verdict{ font-size:12px; color:var(--sub); margin-top:4px; }
+
+  label{ display:block; color:var(--sub); font-size:12px; font-weight:600; margin-bottom:6px; }
+  .field{ display:flex; gap:8px; }
+  input{ flex:1; padding:13px 14px; border-radius:14px; border:1px solid var(--line); background:#fbfbff;
+    color:var(--ink); font-size:16px; }
+  input:focus{ outline:0; border-color:var(--brand1); box-shadow:0 0 0 3px rgba(109,92,255,.15); }
+
+  .pricebox{ margin-top:12px; }
+  .cardname{ font-size:16px; font-weight:800; }
+  .prices{ display:flex; gap:10px; margin-top:10px; }
+  .pill{ flex:1; border-radius:16px; padding:12px; text-align:center; }
+  .pill.psa{ background:linear-gradient(135deg,rgba(109,92,255,.12),rgba(168,85,247,.12)); border:1px solid rgba(109,92,255,.25); }
+  .pill.raw{ background:#f4f6fb; border:1px solid var(--line); }
+  .pill .k{ font-size:11px; color:var(--sub); font-weight:700; }
+  .pill .v{ font-size:20px; font-weight:800; margin-top:2px; }
+  .pill.psa .v{ color:var(--brand1); }
+  .src{ font-size:11px; color:var(--sub); margin-top:10px; }
+  .empty{ color:var(--sub); font-size:13px; margin-top:12px; }
+  .chip{ display:inline-block; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; }
 </style>
 </head>
 <body>
-<header>📷 AgiS カード検品（MVP v0）</header>
-<div class="wrap">
+<div class="app">
+
+  <div class="top">
+    <div class="logo">🎴</div>
+    <div class="brand">AgiS <small>CARD SCAN</small></div>
+  </div>
 
   <div class="stage" id="stage">
     <video id="video" playsinline muted></video>
     <canvas id="canvas" hidden></canvas>
-    <div class="guide" id="guide"></div>
+    <div class="frame" id="frame"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
+    <div class="scanhint" id="scanhint">カードを枠に合わせて撮影</div>
   </div>
-  <div class="hint" id="hint">カードを枠に合わせて撮影。撮影後、内側の枠（絵柄の縁）の四隅を順にタップ → 上下左右の余白比が出る。</div>
 
-  <div class="row">
-    <button id="shot">撮影</button>
-    <button id="retry" class="sub" hidden>撮り直す</button>
+  <div class="shutter">
+    <button id="shot" aria-label="撮影"></button>
+  </div>
+  <div class="mini">
+    <button id="retry" hidden>↺ 撮り直す</button>
   </div>
 
   <div class="card" id="centerBox" hidden>
-    <div class="muted">センタリング（目安・判定は自分の目で）</div>
-    <div class="big" id="centerResult">内側の四隅をタップ（左上→右上→右下→左下）</div>
+    <h3>センタリング（目安）</h3>
+    <div id="centerHint" class="empty">撮影後、内側の枠（絵柄の縁）の四隅を 左上→右上→右下→左下 の順にタップ</div>
+    <div id="centerViz" hidden>
+      <div class="barwrap">
+        <div class="barlabel"><span>左右</span><span id="lrText">–</span></div>
+        <div class="bar"><div class="fill" id="lrFill"></div><div class="center"></div></div>
+      </div>
+      <div class="barwrap">
+        <div class="barlabel"><span>上下</span><span id="tbText">–</span></div>
+        <div class="bar"><div class="fill" id="tbFill"></div><div class="center"></div></div>
+      </div>
+      <div class="verdict" id="verdict"></div>
+    </div>
   </div>
 
   <div class="card">
+    <h3>相場</h3>
     <label>型式（例: M2a 223/193 ／ 289/SV-P）</label>
-    <input id="ptype" placeholder="型式を入力（後でOCR自動化）">
-    <div id="priceOut" class="muted" style="margin-top:10px">型式を入れると相場が出る</div>
+    <div class="field"><input id="ptype" placeholder="型式を入力（後でOCR自動化）"></div>
+    <div id="priceOut" class="empty">型式を入れると相場が出る</div>
   </div>
 
 </div>
 
 <script>
 (function(){
-  const video=document.getElementById('video');
-  const canvas=document.getElementById('canvas');
-  const guide=document.getElementById('guide');
-  const shot=document.getElementById('shot');
-  const retry=document.getElementById('retry');
-  const hint=document.getElementById('hint');
-  const centerBox=document.getElementById('centerBox');
-  const centerResult=document.getElementById('centerResult');
-  const ptype=document.getElementById('ptype');
-  const priceOut=document.getElementById('priceOut');
-  let stream=null, taps=[], PRICES={};
+  const $=id=>document.getElementById(id);
+  const video=$('video'),canvas=$('canvas'),frame=$('frame'),scanhint=$('scanhint');
+  const shot=$('shot'),retry=$('retry'),centerBox=$('centerBox'),centerHint=$('centerHint');
+  const centerViz=$('centerViz'),lrFill=$('lrFill'),tbFill=$('tbFill'),lrText=$('lrText'),tbText=$('tbText'),verdict=$('verdict');
+  const ptype=$('ptype'),priceOut=$('priceOut');
+  let taps=[], PRICES={};
 
   fetch('prices.json?'+Date.now()).then(r=>r.json()).then(d=>{PRICES=d.cards||{};}).catch(()=>{});
 
   async function startCam(){
     try{
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
-      video.srcObject=stream; await video.play();
-      video.hidden=false; canvas.hidden=true; guide.hidden=false;
-    }catch(e){ hint.textContent='カメラを起動できない。型式入力→相場は使えます。'; }
+      const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
+      video.srcObject=s; await video.play();
+    }catch(e){ scanhint.textContent='カメラ不可（型式→相場は使えます）'; }
   }
-
   function capture(){
-    const w=video.videoWidth||720, h=video.videoHeight||960;
-    canvas.width=w; canvas.height=h;
-    canvas.getContext('2d').drawImage(video,0,0,w,h);
-    video.hidden=true; canvas.hidden=false; guide.hidden=true;
-    shot.hidden=true; retry.hidden=false;
-    centerBox.hidden=false; taps=[];
-    centerResult.textContent='内側の四隅をタップ（残り 4）';
+    const w=video.videoWidth||720,h=video.videoHeight||960;
+    canvas.width=w; canvas.height=h; canvas.getContext('2d').drawImage(video,0,0,w,h);
+    video.hidden=true; canvas.hidden=false; frame.hidden=true; scanhint.hidden=true;
+    shot.parentElement.style.display='none'; retry.hidden=false;
+    centerBox.hidden=false; centerHint.hidden=false; centerViz.hidden=true; centerHint.textContent='内側の四隅をタップ（残り 4）'; taps=[];
   }
   function resetShot(){
-    video.hidden=false; canvas.hidden=true; guide.hidden=false;
-    shot.hidden=false; retry.hidden=true; centerBox.hidden=true; taps=[];
+    video.hidden=false; canvas.hidden=false; canvas.hidden=true; frame.hidden=false; scanhint.hidden=false;
+    shot.parentElement.style.display=''; retry.hidden=true; centerBox.hidden=true; taps=[];
   }
-
-  canvas.addEventListener('pointerdown', function(ev){
+  canvas.addEventListener('pointerdown',function(ev){
     if(canvas.hidden) return;
     const r=canvas.getBoundingClientRect();
-    const x=(ev.clientX-r.left)/r.width*canvas.width;
-    const y=(ev.clientY-r.top)/r.height*canvas.height;
+    const x=(ev.clientX-r.left)/r.width*canvas.width, y=(ev.clientY-r.top)/r.height*canvas.height;
     taps.push({x:x,y:y});
-    const ctx=canvas.getContext('2d');
-    ctx.fillStyle='#4a7dff'; ctx.beginPath(); ctx.arc(x,y,10,0,7); ctx.fill();
+    const ctx=canvas.getContext('2d'); ctx.fillStyle='#6d5cff'; ctx.beginPath(); ctx.arc(x,y,12,0,7); ctx.fill();
     const rem=4-taps.length;
-    if(rem>0){ centerResult.textContent='内側の四隅をタップ（残り '+rem+'）'; return; }
-    computeCentering();
+    if(rem>0){ centerHint.textContent='内側の四隅をタップ（残り '+rem+'）'; return; }
+    showCentering();
   });
-
-  function computeCentering(){
+  function qcolor(p){ const off=Math.abs(p-50); return off<=5?'var(--good)':(off<=12?'var(--warn)':'var(--bad)'); }
+  function showCentering(){
     const xs=taps.map(t=>t.x), ys=taps.map(t=>t.y);
-    const innerL=Math.min.apply(null,xs), innerR=canvas.width-Math.max.apply(null,xs);
-    const innerT=Math.min.apply(null,ys), innerB=canvas.height-Math.max.apply(null,ys);
-    if(!(innerL+innerR>0)||!(innerT+innerB>0)){ centerResult.textContent='うまく取れなかった。撮り直してタップし直して。'; return; }
-    const lr=Math.round(innerL/(innerL+innerR)*100);
-    const tb=Math.round(innerT/(innerT+innerB)*100);
-    centerResult.innerHTML='左右 <b>'+lr+':'+(100-lr)+'</b> ／ 上下 <b>'+tb+':'+(100-tb)+'</b><br><span class="muted">50:50に近いほど良い。PSA10狙いの目安は概ね55:45以内。判定は自分の目で。</span>';
+    const L=Math.min.apply(null,xs), R=canvas.width-Math.max.apply(null,xs);
+    const T=Math.min.apply(null,ys), B=canvas.height-Math.max.apply(null,ys);
+    if(!(L+R>0)||!(T+B>0)){ centerHint.textContent='うまく取れなかった。撮り直して。'; return; }
+    const lr=Math.round(L/(L+R)*100), tb=Math.round(T/(T+B)*100);
+    centerHint.hidden=true; centerViz.hidden=false;
+    lrText.textContent=lr+' : '+(100-lr); tbText.textContent=tb+' : '+(100-tb);
+    lrFill.style.width=lr+'%'; lrFill.style.background=qcolor(lr);
+    tbFill.style.width=tb+'%'; tbFill.style.background=qcolor(tb);
+    const worst=Math.max(Math.abs(lr-50),Math.abs(tb-50));
+    verdict.textContent = worst<=5 ? '◎ センタリング良好（PSA10狙える目安）'
+      : worst<=12 ? '○ ややズレ。角・エッジと合わせて判断' : '△ ズレ大。PSA10は厳しめ（自分の目で最終判断）';
   }
 
-  function slug(t){
-    var s=String(t).trim().toLowerCase().replace(/[\s/]+/g,'-');
-    return s.replace(/-+/g,'-').replace(/^-|-$/g,'');
-  }
-  function yen(v){ return (typeof v==='number') ? '¥'+v.toLocaleString() : '—'; }
+  function slug(t){ return String(t).trim().toLowerCase().replace(/[\s/]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,''); }
+  function yen(v){ return (typeof v==='number')?'¥'+v.toLocaleString():'—'; }
   function lookup(){
     const k=slug(ptype.value);
-    if(!k){ priceOut.className='muted'; priceOut.textContent='型式を入れると相場が出る'; return; }
+    if(!k){ priceOut.className='empty'; priceOut.textContent='型式を入れると相場が出る'; return; }
     const c=PRICES[k];
-    if(!c){ priceOut.className='muted'; priceOut.innerHTML='「'+k+'」は未収録。<br>スニダン現物で確認を。'; return; }
-    priceOut.className='';
-    priceOut.innerHTML='<div class="name">'+(c.name||'')+'</div>'+
-      '<div class="price">PSA10 '+yen(c.psa10)+' ／ 素体 '+yen(c.sotai)+'</div>'+
-      '<div class="muted" style="margin-top:6px">出典 '+(c.src||'')+'（算定値）。最終値付けはスニダン現物で。</div>';
+    if(!c){ priceOut.className='empty'; priceOut.innerHTML='<span class="chip" style="background:#fff0f4;color:#e11d63">未収録</span> スニダン現物で確認を（'+k+'）'; return; }
+    priceOut.className='pricebox';
+    priceOut.innerHTML=
+      '<div class="cardname">'+(c.name||'')+'</div>'+
+      '<div class="prices">'+
+        '<div class="pill psa"><div class="k">PSA10</div><div class="v">'+yen(c.psa10)+'</div></div>'+
+        '<div class="pill raw"><div class="k">素体</div><div class="v">'+yen(c.sotai)+'</div></div>'+
+      '</div>'+
+      '<div class="src">出典 '+(c.src||'')+'（算定値）・最終値付けはスニダン現物で</div>';
   }
-  ptype.addEventListener('input', lookup);
-
-  shot.addEventListener('click', capture);
-  retry.addEventListener('click', resetShot);
+  ptype.addEventListener('input',lookup);
+  shot.addEventListener('click',capture);
+  retry.addEventListener('click',resetShot);
   startCam();
 })();
 </script>
